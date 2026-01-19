@@ -140,15 +140,9 @@ func runConfig(cmd *cobra.Command, args []string) error {
 		path = config.DefaultConfigPath()
 	}
 
-	// Generate only mode
+	// Generate only mode - output template to stdout
 	if configGenerate {
-		if config.Exists(path) {
-			return fmt.Errorf("config file already exists: %s", path)
-		}
-		if err := config.CreateDefault(path); err != nil {
-			return fmt.Errorf("failed to create config: %w", err)
-		}
-		ui.Info("config created", "path", path)
+		fmt.Print(config.DefaultTemplate)
 		return nil
 	}
 
@@ -163,6 +157,11 @@ func runConfig(cmd *cobra.Command, args []string) error {
 		}
 		ui.Info("config is valid", "path", path)
 		return nil
+	}
+
+	// Cannot edit remote configs
+	if config.IsRemote(path) {
+		return fmt.Errorf("cannot edit remote config, use --validate to check it")
 	}
 
 	// Create default config if it doesn't exist

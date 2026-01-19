@@ -2,9 +2,13 @@ package config
 
 import (
 	"fmt"
+	"io"
+	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/arch-err/autogitter/internal/connector"
 	"gopkg.in/yaml.v3"
@@ -58,7 +62,7 @@ func DefaultConfigPath() string {
 }
 
 func Load(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
+	data, err := readConfig(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
@@ -75,6 +79,83 @@ func Load(path string) (*Config, error) {
 	cfg.ExpandPaths()
 
 	return &cfg, nil
+}
+
+// readConfig reads config data from a local file, HTTP URL, or SSH path
+func readConfig(path string) ([]byte, error) {
+	// HTTP/HTTPS URL
+	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+		return fetchHTTP(path)
+	}
+
+	// SSH URL (ssh://user@host/path or user@host:/path)
+	if strings.HasPrefix(path, "ssh://") || isSSHPath(path) {
+		return fetchSSH(path)
+	}
+
+	// Local file
+	return os.ReadFile(path)
+}
+
+// isSSHPath checks if path looks like an SSH path (user@host:/path)
+func isSSHPath(path string) bool {
+	// Must contain @ and : but not be a Windows path (C:\)
+	atIdx := strings.Index(path, "@")
+	colonIdx := strings.Index(path, ":")
+	return atIdx > 0 && colonIdx > atIdx && !strings.HasPrefix(path[colonIdx:], ":\\")
+}
+
+// fetchHTTP fetches config from an HTTP/HTTPS URL
+func fetchHTTP(url string) ([]byte, error) {
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch config: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch config: HTTP %d", resp.StatusCode)
+	}
+
+	return io.ReadAll(resp.Body)
+}
+
+// fetchSSH fetches config from a remote host via SSH
+func fetchSSH(path string) ([]byte, error) {
+	var host, remotePath string
+
+	if strings.HasPrefix(path, "ssh://") {
+		// ssh://user@host/path/to/config.yaml
+		path = strings.TrimPrefix(path, "ssh://")
+		// Find the first / after the host
+		slashIdx := strings.Index(path, "/")
+		if slashIdx == -1 {
+			return nil, fmt.Errorf("invalid SSH URL: missing path")
+		}
+		host = path[:slashIdx]
+		remotePath = path[slashIdx:]
+	} else {
+		// user@host:/path/to/config.yaml
+		colonIdx := strings.Index(path, ":")
+		host = path[:colonIdx]
+		remotePath = path[colonIdx+1:]
+	}
+
+	// Use ssh to cat the remote file
+	cmd := exec.Command("ssh", host, "cat", remotePath)
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return nil, fmt.Errorf("SSH failed: %s", string(exitErr.Stderr))
+		}
+		return nil, fmt.Errorf("SSH failed: %w", err)
+	}
+
+	return output, nil
 }
 
 func (c *Config) Validate() error {
@@ -218,9 +299,21 @@ func (c *Config) Save(path string) error {
 }
 
 // Exists checks if a config file exists at the given path
+// For remote URLs (HTTP/SSH), always returns true (validation will fail if not accessible)
 func Exists(path string) bool {
+	if IsRemote(path) {
+		return true
+	}
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// IsRemote checks if the path is a remote URL (HTTP or SSH)
+func IsRemote(path string) bool {
+	return strings.HasPrefix(path, "http://") ||
+		strings.HasPrefix(path, "https://") ||
+		strings.HasPrefix(path, "ssh://") ||
+		isSSHPath(path)
 }
 
 // DefaultTemplate is the template for new config files
