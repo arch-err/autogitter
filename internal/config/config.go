@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/arch-err/autogitter/internal/connector"
 	"gopkg.in/yaml.v3"
 )
 
@@ -25,6 +26,7 @@ type Source struct {
 	Name         string       `yaml:"name"`
 	Source       string       `yaml:"source"`
 	Strategy     Strategy     `yaml:"strategy"`
+	Type         string       `yaml:"type,omitempty"` // "github", "gitea", or auto-detect from host
 	FileStrategy FileStrategy `yaml:"file_strategy,omitempty"`
 	LocalPath    string       `yaml:"local_path"`
 	PrivateKey   string       `yaml:"private_key,omitempty"`
@@ -128,20 +130,47 @@ func expandPath(path string) string {
 	return path
 }
 
+// GetBranch returns the configured branch, or empty string to use remote default
 func (s *Source) GetBranch() string {
-	if s.Branch != "" {
-		return s.Branch
-	}
-	return "main"
+	return s.Branch
 }
 
 func (s *Source) GetRepoURL(repo string) string {
 	// Extract just the host from the source (e.g., "github.com" from "github.com/user")
+	host := s.GetHost()
+	return fmt.Sprintf("git@%s:%s.git", host, repo)
+}
+
+// GetHost extracts the host from the source field
+func (s *Source) GetHost() string {
 	host := s.Source
 	if idx := strings.Index(s.Source, "/"); idx != -1 {
 		host = s.Source[:idx]
 	}
-	return fmt.Sprintf("git@%s:%s.git", host, repo)
+	return host
+}
+
+// GetUserOrOrg extracts the user/org from the source field
+func (s *Source) GetUserOrOrg() string {
+	if idx := strings.Index(s.Source, "/"); idx != -1 {
+		return s.Source[idx+1:]
+	}
+	return ""
+}
+
+// GetConnectorType returns the connector type for this source
+func (s *Source) GetConnectorType() connector.ConnectorType {
+	// If explicitly specified, use that
+	if s.Type != "" {
+		switch strings.ToLower(s.Type) {
+		case "github":
+			return connector.ConnectorGitHub
+		case "gitea":
+			return connector.ConnectorGitea
+		}
+	}
+	// Otherwise, auto-detect from host
+	return connector.DetectType(s.GetHost())
 }
 
 func (c *Config) Save(path string) error {
@@ -178,7 +207,7 @@ sources:
     source: github.com/your-username
     strategy: manual
     local_path: "~/Git/github"
-    # branch: main  # optional, defaults to main
+    # branch: main  # optional, uses remote default if not set
     # private_key: "~/.ssh/id_rsa"  # optional, for private repos
     repos:
       - your-username/repo1
@@ -203,4 +232,27 @@ func CreateDefault(path string) error {
 func ValidateFile(path string) error {
 	_, err := Load(path)
 	return err
+}
+
+// ValidateCredentials checks that required API tokens are available for non-manual strategies
+func (c *Config) ValidateCredentials() []string {
+	var warnings []string
+
+	for _, src := range c.Sources {
+		if src.Strategy == StrategyManual {
+			continue
+		}
+
+		connType := src.GetConnectorType()
+		token := connector.GetToken(connType)
+		if token == "" {
+			envVar := connector.GetEnvVarName(connType)
+			warnings = append(warnings, fmt.Sprintf(
+				"source %q (strategy: %s) requires %s environment variable",
+				src.Name, src.Strategy, envVar,
+			))
+		}
+	}
+
+	return warnings
 }

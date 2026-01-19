@@ -2,6 +2,41 @@
 
 ## Commands
 
+### connect
+
+Configure API authentication for GitHub, Gitea, or other Git providers.
+
+```bash
+ag connect [flags]
+```
+
+**Flags:**
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--type` | `-t` | Connector type (github, gitea) |
+| `--host` | `-H` | Git server host (e.g., gitea.company.com) |
+| `--token` | `-T` | API token (skips interactive prompt) |
+| `--list` | `-l` | List configured connections |
+
+**Examples:**
+
+```bash
+# Interactive setup (recommended)
+ag connect
+
+# List configured connections
+ag connect --list
+
+# Non-interactive GitHub setup
+ag connect --type github --token ghp_xxxx
+
+# Non-interactive Gitea setup
+ag connect --type gitea --host gitea.company.com --token xxxx
+```
+
+Tokens are stored in `$XDG_DATA_HOME/autogitter/credentials.env` (typically `~/.local/share/autogitter/credentials.env`).
+
 ### sync
 
 Synchronize repositories according to config.

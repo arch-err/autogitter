@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	gosync "sync"
 
 	"github.com/arch-err/autogitter/internal/config"
+	"github.com/arch-err/autogitter/internal/connector"
 	"github.com/arch-err/autogitter/internal/git"
 	"github.com/arch-err/autogitter/internal/ui"
 )
@@ -50,10 +52,33 @@ type RepoStatus struct {
 func Run(cfg *config.Config, opts SyncOptions) (*SyncResult, error) {
 	result := &SyncResult{}
 
+	// Load credentials from credentials.env if it exists
+	credPath := connector.DefaultCredentialsPath()
+	if err := connector.LoadCredentialsEnv(credPath); err != nil {
+		ui.Debug("failed to load credentials file", "error", err)
+	}
+
 	for i := range cfg.Sources {
 		source := &cfg.Sources[i]
-		if source.Strategy != config.StrategyManual {
+
+		// Handle strategy-specific logic
+		switch source.Strategy {
+		case config.StrategyManual:
+			// Manual strategy uses the repos from config
+		case config.StrategyAll:
+			// Fetch repos from API
+			repos, err := fetchReposFromAPI(source)
+			if err != nil {
+				ui.Warn("skipping source - failed to fetch repos", "source", source.Name, "error", err)
+				continue
+			}
+			source.Repos = repos
+			ui.Debug("fetched repos from API", "source", source.Name, "count", len(repos))
+		case config.StrategyFile:
 			ui.Warn("skipping source with unsupported strategy", "source", source.Name, "strategy", source.Strategy)
+			continue
+		default:
+			ui.Warn("skipping source with unknown strategy", "source", source.Name, "strategy", source.Strategy)
 			continue
 		}
 
@@ -70,6 +95,37 @@ func Run(cfg *config.Config, opts SyncOptions) (*SyncResult, error) {
 	}
 
 	return result, nil
+}
+
+// fetchReposFromAPI fetches repository list from the Git provider API
+func fetchReposFromAPI(source *config.Source) ([]string, error) {
+	connType := source.GetConnectorType()
+	token := connector.GetToken(connType)
+
+	if token == "" {
+		envVar := connector.GetEnvVarName(connType)
+		return nil, fmt.Errorf("no token found - set %s or run 'ag connect'", envVar)
+	}
+
+	host := source.GetHost()
+	userOrOrg := source.GetUserOrOrg()
+
+	if userOrOrg == "" {
+		return nil, fmt.Errorf("source must include user/org (e.g., github.com/username)")
+	}
+
+	conn, err := connector.New(connType, host, token)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create connector: %w", err)
+	}
+
+	ctx := context.Background()
+	repos, err := conn.ListRepos(ctx, userOrOrg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list repos: %w", err)
+	}
+
+	return repos, nil
 }
 
 func syncSource(source *config.Source, cfg *config.Config, opts SyncOptions) (*SyncResult, error) {
