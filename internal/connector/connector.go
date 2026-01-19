@@ -25,8 +25,9 @@ type Connector interface {
 type ConnectorType string
 
 const (
-	ConnectorGitHub ConnectorType = "github"
-	ConnectorGitea  ConnectorType = "gitea"
+	ConnectorGitHub    ConnectorType = "github"
+	ConnectorGitea     ConnectorType = "gitea"
+	ConnectorBitbucket ConnectorType = "bitbucket"
 )
 
 // New creates a new connector based on type
@@ -36,6 +37,8 @@ func New(connType ConnectorType, host string, token string) (Connector, error) {
 		return NewGitHubConnector(host, token), nil
 	case ConnectorGitea:
 		return NewGiteaConnector(host, token), nil
+	case ConnectorBitbucket:
+		return NewBitbucketConnector(host, token), nil
 	default:
 		return nil, fmt.Errorf("unknown connector type: %s", connType)
 	}
@@ -46,6 +49,12 @@ func DetectType(host string) ConnectorType {
 	host = strings.ToLower(host)
 	if strings.Contains(host, "github.com") {
 		return ConnectorGitHub
+	}
+	if strings.Contains(host, "bitbucket.org") {
+		return ConnectorBitbucket
+	}
+	if strings.Contains(host, "gitea.com") {
+		return ConnectorGitea
 	}
 	// Default to Gitea for self-hosted instances
 	return ConnectorGitea
@@ -165,6 +174,8 @@ func GetToken(connType ConnectorType) string {
 		return getGhCliToken("github.com")
 	case ConnectorGitea:
 		return os.Getenv("GITEA_TOKEN")
+	case ConnectorBitbucket:
+		return os.Getenv("BITBUCKET_TOKEN")
 	default:
 		return ""
 	}
@@ -212,6 +223,8 @@ func GetEnvVarName(connType ConnectorType) string {
 		return "GITHUB_TOKEN"
 	case ConnectorGitea:
 		return "GITEA_TOKEN"
+	case ConnectorBitbucket:
+		return "BITBUCKET_TOKEN"
 	default:
 		return ""
 	}

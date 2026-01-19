@@ -372,7 +372,7 @@ func cloneWorker(jobs <-chan cloneJob, results chan<- cloneResult, wg *gosync.Wa
 			URL:        job.source.GetRepoURL(job.status.FullName),
 			Path:       job.status.LocalPath,
 			Branch:     job.source.GetBranch(),
-			PrivateKey: job.source.PrivateKey,
+			PrivateKey: job.source.GetPrivateKey(),
 		})
 		results <- cloneResult{
 			name:    job.status.FullName,
