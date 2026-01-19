@@ -49,10 +49,11 @@ var configCmd = &cobra.Command{
 }
 
 var (
-	syncPrune bool
-	syncAdd   bool
-	syncForce bool
-	syncJobs  int
+	syncPrune      bool
+	syncAdd        bool
+	syncForce      bool
+	syncJobs       int
+	configValidate bool
 )
 
 func init() {
@@ -65,6 +66,8 @@ func init() {
 	syncCmd.Flags().IntVarP(&syncJobs, "jobs", "j", 4, "number of parallel clone workers")
 
 	rootCmd.AddCommand(syncCmd)
+
+	configCmd.Flags().BoolVarP(&configValidate, "validate", "v", false, "validate config file without editing")
 	rootCmd.AddCommand(configCmd)
 }
 
@@ -113,6 +116,19 @@ func runConfig(cmd *cobra.Command, args []string) error {
 	path := configPath
 	if path == "" {
 		path = config.DefaultConfigPath()
+	}
+
+	// Validate only mode
+	if configValidate {
+		if !config.Exists(path) {
+			return fmt.Errorf("config file not found: %s", path)
+		}
+		if err := config.ValidateFile(path); err != nil {
+			ui.Error("config validation failed", "error", err)
+			return err
+		}
+		ui.Info("config is valid", "path", path)
+		return nil
 	}
 
 	// Create default config if it doesn't exist

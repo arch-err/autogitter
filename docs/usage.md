@@ -40,10 +40,29 @@ ag sync -j 8
 
 ### config
 
-Edit the configuration file in your default editor.
+Edit or validate the configuration file.
 
 ```bash
+ag config [flags]
+```
+
+**Flags:**
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--validate` | `-v` | Validate config without editing |
+
+**Examples:**
+
+```bash
+# Edit config in $EDITOR
 ag config
+
+# Validate config file
+ag config --validate
+
+# Validate a specific config file
+ag config -v -c /path/to/config.yaml
 ```
 
 - Opens config in `$EDITOR` (falls back to `vim`, `nano`, or `vi`)
