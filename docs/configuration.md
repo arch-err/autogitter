@@ -36,7 +36,7 @@ sources:
 |-------|----------|-------------|
 | `name` | Yes | Display name for the source |
 | `source` | Yes | Git host and user/org (e.g., `github.com/username`) |
-| `strategy` | Yes | Sync strategy: `manual`, `all`, or `file` |
+| `strategy` | Yes | Sync strategy: `manual`, `all`, `regex`, or `file` |
 | `type` | No | Provider type: `github`, `gitea`, `bitbucket` (auto-detected from host if omitted) |
 | `local_path` | Yes | Where to clone repos (supports `$HOME`, `~`) |
 | `repos` | For manual | List of repos to sync |
@@ -65,6 +65,18 @@ strategy: all
 ```
 
 This will fetch all non-archived repositories from the specified user or organization.
+
+### Regex
+
+Sync repositories matching a regex pattern. Requires API authentication - run `ag connect` first.
+
+```yaml
+strategy: regex
+regex_strategy:
+  pattern: "^myorg/api-.*"  # matches repos starting with "api-"
+```
+
+The pattern is matched against the full repository name (e.g., `username/repo-name`).
 
 ### File (Coming Soon)
 
