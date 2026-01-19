@@ -56,6 +56,7 @@ ag sync [flags]
 | `--add` | `-a` | Add orphaned repos to config |
 | `--force` | | Skip confirmation prompts |
 | `--jobs` | `-j` | Number of parallel clone workers (default: 4) |
+| `--dry-run` | `-n` | Show what would happen without making changes |
 
 **Examples:**
 
@@ -74,6 +75,34 @@ ag sync --prune --force
 
 # Clone with 8 parallel workers
 ag sync -j 8
+
+# Preview changes without making them
+ag sync --dry-run
+```
+
+### pull
+
+Pull updates for all local repositories.
+
+```bash
+ag pull [flags]
+```
+
+**Flags:**
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--force` | | Skip confirmation prompts |
+| `--jobs` | `-j` | Number of parallel pull workers (default: 4) |
+
+**Examples:**
+
+```bash
+# Pull all repos
+ag pull
+
+# Pull with 8 parallel workers
+ag pull -j 8
 ```
 
 ### config

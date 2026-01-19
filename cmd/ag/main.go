@@ -58,11 +58,21 @@ var connectCmd = &cobra.Command{
 	RunE:  runConnect,
 }
 
+var pullCmd = &cobra.Command{
+	Use:   "pull",
+	Short: "Pull updates for all local repos",
+	Long:  `Pull runs git pull on all repositories found in the configured source directories.`,
+	RunE:  runPull,
+}
+
 var (
 	syncPrune      bool
 	syncAdd        bool
 	syncForce      bool
 	syncJobs       int
+	syncDryRun     bool
+	pullForce      bool
+	pullJobs       int
 	configValidate bool
 	configGenerate bool
 	connectType    string
@@ -79,8 +89,13 @@ func init() {
 	syncCmd.Flags().BoolVarP(&syncAdd, "add", "a", false, "add orphaned repos to config")
 	syncCmd.Flags().BoolVar(&syncForce, "force", false, "skip confirmation prompts")
 	syncCmd.Flags().IntVarP(&syncJobs, "jobs", "j", 4, "number of parallel clone workers")
+	syncCmd.Flags().BoolVarP(&syncDryRun, "dry-run", "n", false, "show what would happen without making changes")
 
 	rootCmd.AddCommand(syncCmd)
+
+	pullCmd.Flags().BoolVar(&pullForce, "force", false, "skip confirmation prompts")
+	pullCmd.Flags().IntVarP(&pullJobs, "jobs", "j", 4, "number of parallel pull workers")
+	rootCmd.AddCommand(pullCmd)
 
 	configCmd.Flags().BoolVarP(&configValidate, "validate", "v", false, "validate config file without editing")
 	configCmd.Flags().BoolVarP(&configGenerate, "generate", "g", false, "generate default config file")
@@ -122,6 +137,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 		Force:      syncForce,
 		ConfigPath: cfgPath,
 		Jobs:       syncJobs,
+		DryRun:     syncDryRun,
 	}
 
 	result, err := sync.Run(cfg, opts)
@@ -130,6 +146,30 @@ func runSync(cmd *cobra.Command, args []string) error {
 	}
 
 	ui.PrintSummary(result.Cloned, result.Pruned, result.Skipped)
+
+	return nil
+}
+
+func runPull(cmd *cobra.Command, args []string) error {
+	cfg, cfgPath, err := loadConfig()
+	if err != nil {
+		ui.Error("failed to load config", "error", err)
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	ui.Info("loaded config", "path", cfgPath, "sources", len(cfg.Sources))
+
+	opts := sync.PullOptions{
+		Force: pullForce,
+		Jobs:  pullJobs,
+	}
+
+	result, err := sync.RunPull(cfg, opts)
+	if err != nil {
+		return err
+	}
+
+	ui.Info("pull complete", "updated", result.Updated, "failed", result.Failed)
 
 	return nil
 }

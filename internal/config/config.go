@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -20,10 +21,15 @@ const (
 	StrategyManual Strategy = "manual"
 	StrategyAll    Strategy = "all"
 	StrategyFile   Strategy = "file"
+	StrategyRegex  Strategy = "regex"
 )
 
 type FileStrategy struct {
 	Filename string `yaml:"filename"`
+}
+
+type RegexStrategy struct {
+	Pattern string `yaml:"pattern"`
 }
 
 type SSHOptions struct {
@@ -32,16 +38,17 @@ type SSHOptions struct {
 }
 
 type Source struct {
-	Name         string       `yaml:"name"`
-	Source       string       `yaml:"source"`
-	Strategy     Strategy     `yaml:"strategy"`
-	Type         string       `yaml:"type,omitempty"` // "github", "gitea", "bitbucket", or auto-detect from host
-	FileStrategy FileStrategy `yaml:"file_strategy,omitempty"`
-	LocalPath    string       `yaml:"local_path"`
-	SSHOptions   SSHOptions   `yaml:"ssh_options,omitempty"`
-	PrivateKey   string       `yaml:"private_key,omitempty"` // deprecated: use ssh_options.private_key
-	Branch       string       `yaml:"branch,omitempty"`
-	Repos        []string     `yaml:"repos,omitempty"`
+	Name          string        `yaml:"name"`
+	Source        string        `yaml:"source"`
+	Strategy      Strategy      `yaml:"strategy"`
+	Type          string        `yaml:"type,omitempty"` // "github", "gitea", "bitbucket", or auto-detect from host
+	FileStrategy  FileStrategy  `yaml:"file_strategy,omitempty"`
+	RegexStrategy RegexStrategy `yaml:"regex_strategy,omitempty"`
+	LocalPath     string        `yaml:"local_path"`
+	SSHOptions    SSHOptions    `yaml:"ssh_options,omitempty"`
+	PrivateKey    string        `yaml:"private_key,omitempty"` // deprecated: use ssh_options.private_key
+	Branch        string        `yaml:"branch,omitempty"`
+	Repos         []string      `yaml:"repos,omitempty"`
 }
 
 type Config struct {
@@ -179,8 +186,8 @@ func (c *Config) Validate() error {
 			if len(src.Repos) == 0 {
 				return fmt.Errorf("source %q: repos list is required for manual strategy", src.Name)
 			}
-		case StrategyAll, StrategyFile:
-			// Valid strategies for future implementation
+		case StrategyAll, StrategyFile, StrategyRegex:
+			// Valid strategies that fetch from API
 		case "":
 			return fmt.Errorf("source %q: strategy is required", src.Name)
 		default:
@@ -189,6 +196,15 @@ func (c *Config) Validate() error {
 
 		if src.Strategy == StrategyFile && src.FileStrategy.Filename == "" {
 			return fmt.Errorf("source %q: file_strategy.filename is required for file strategy", src.Name)
+		}
+
+		if src.Strategy == StrategyRegex {
+			if src.RegexStrategy.Pattern == "" {
+				return fmt.Errorf("source %q: regex_strategy.pattern is required for regex strategy", src.Name)
+			}
+			if _, err := regexp.Compile(src.RegexStrategy.Pattern); err != nil {
+				return fmt.Errorf("source %q: invalid regex pattern: %w", src.Name, err)
+			}
 		}
 	}
 
