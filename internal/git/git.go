@@ -17,6 +17,11 @@ type CloneOptions struct {
 	PrivateKey string
 }
 
+type PullOptions struct {
+	Path       string
+	PrivateKey string
+}
+
 func Clone(opts CloneOptions) error {
 	if opts.URL == "" {
 		return fmt.Errorf("URL is required")
@@ -53,6 +58,28 @@ func Clone(opts CloneOptions) error {
 	}
 
 	log.Debug("cloned repository", "url", opts.URL, "path", opts.Path)
+	return nil
+}
+
+func Pull(opts PullOptions) error {
+	if opts.Path == "" {
+		return fmt.Errorf("path is required")
+	}
+
+	cmd := exec.Command("git", "-C", opts.Path, "pull")
+
+	// Handle custom SSH key
+	if opts.PrivateKey != "" {
+		sshCmd := fmt.Sprintf("ssh -i %s -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new", opts.PrivateKey)
+		cmd.Env = append(os.Environ(), "GIT_SSH_COMMAND="+sshCmd)
+	}
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git pull failed: %w\n%s", err, string(output))
+	}
+
+	log.Debug("pulled repository", "path", opts.Path)
 	return nil
 }
 

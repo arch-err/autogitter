@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	gosync "sync"
 
@@ -20,6 +21,7 @@ type SyncOptions struct {
 	Force      bool
 	ConfigPath string
 	Jobs       int
+	DryRun     bool
 }
 
 type cloneJob struct {
@@ -74,6 +76,20 @@ func Run(cfg *config.Config, opts SyncOptions) (*SyncResult, error) {
 			}
 			source.Repos = repos
 			ui.Debug("fetched repos from API", "source", source.Name, "count", len(repos))
+		case config.StrategyRegex:
+			// Fetch repos from API, then filter by regex pattern
+			repos, err := fetchReposFromAPI(source)
+			if err != nil {
+				ui.Warn("skipping source - failed to fetch repos", "source", source.Name, "error", err)
+				continue
+			}
+			filtered, err := filterReposByRegex(repos, source.RegexStrategy.Pattern)
+			if err != nil {
+				ui.Warn("skipping source - invalid regex pattern", "source", source.Name, "error", err)
+				continue
+			}
+			source.Repos = filtered
+			ui.Debug("fetched and filtered repos from API", "source", source.Name, "total", len(repos), "matched", len(filtered))
 		case config.StrategyFile:
 			ui.Warn("skipping source with unsupported strategy", "source", source.Name, "strategy", source.Strategy)
 			continue
@@ -128,25 +144,47 @@ func fetchReposFromAPI(source *config.Source) ([]string, error) {
 	return repos, nil
 }
 
+// filterReposByRegex filters a list of repo names by a regex pattern.
+// The pattern is matched against the full repo name (user/repo format).
+func filterReposByRegex(repos []string, pattern string) ([]string, error) {
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compile regex: %w", err)
+	}
+
+	var filtered []string
+	for _, repo := range repos {
+		if re.MatchString(repo) {
+			filtered = append(filtered, repo)
+		}
+	}
+
+	return filtered, nil
+}
+
 func syncSource(source *config.Source, cfg *config.Config, opts SyncOptions) (*SyncResult, error) {
 	result := &SyncResult{}
 
 	// Check if local_path exists, prompt to create if not
 	if _, err := os.Stat(source.LocalPath); os.IsNotExist(err) {
-		if !opts.Force {
-			create, promptErr := ui.ConfirmCreateDir(source.LocalPath)
-			if promptErr != nil {
-				return nil, fmt.Errorf("failed to get user input: %w", promptErr)
+		if opts.DryRun {
+			ui.Info("would create directory", "path", source.LocalPath)
+		} else {
+			if !opts.Force {
+				create, promptErr := ui.ConfirmCreateDir(source.LocalPath)
+				if promptErr != nil {
+					return nil, fmt.Errorf("failed to get user input: %w", promptErr)
+				}
+				if !create {
+					ui.Info("skipping source", "source", source.Name, "reason", "directory not created")
+					return result, nil
+				}
 			}
-			if !create {
-				ui.Info("skipping source", "source", source.Name, "reason", "directory not created")
-				return result, nil
+			if err := os.MkdirAll(source.LocalPath, 0755); err != nil {
+				return nil, fmt.Errorf("failed to create directory: %w", err)
 			}
+			ui.Info("created directory", "path", source.LocalPath)
 		}
-		if err := os.MkdirAll(source.LocalPath, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create directory: %w", err)
-		}
-		ui.Info("created directory", "path", source.LocalPath)
 	}
 
 	// Get configured repos
@@ -228,61 +266,76 @@ func syncSource(source *config.Source, cfg *config.Config, opts SyncOptions) (*S
 	if hasOrphaned {
 		action := "skip"
 
-		if opts.Prune {
-			action = "prune"
-		} else if opts.Add {
-			action = "add"
+		if opts.DryRun {
+			// In dry-run mode, just report what would happen based on flags
+			orphaned := getOrphanedRepos(statuses)
+			if opts.Prune {
+				for _, repo := range orphaned {
+					ui.Info("would prune", "repo", repo.Name)
+				}
+			} else if opts.Add {
+				for _, repo := range orphaned {
+					fullName := guessFullName(source.Source, repo.Name)
+					ui.Info("would add to config", "repo", fullName)
+				}
+			}
 		} else {
-			// Interactive mode
-			var err error
-			action, err = ui.ConfirmAction()
-			if err != nil {
-				return nil, fmt.Errorf("failed to get user input: %w", err)
-			}
-		}
-
-		switch action {
-		case "prune":
-			orphaned := getOrphanedRepos(statuses)
-			if !opts.Force {
-				names := make([]string, len(orphaned))
-				for i, r := range orphaned {
-					names[i] = r.Name
-				}
-				confirm, err := ui.ConfirmPrune(names)
+			if opts.Prune {
+				action = "prune"
+			} else if opts.Add {
+				action = "add"
+			} else {
+				// Interactive mode
+				var err error
+				action, err = ui.ConfirmAction()
 				if err != nil {
-					return nil, fmt.Errorf("failed to get confirmation: %w", err)
-				}
-				if !confirm {
-					ui.Info("prune cancelled")
-					break
+					return nil, fmt.Errorf("failed to get user input: %w", err)
 				}
 			}
 
-			for _, repo := range orphaned {
-				ui.Info("removing", "repo", repo.Name)
-				if err := os.RemoveAll(repo.LocalPath); err != nil {
-					ui.Error("failed to remove repo", "repo", repo.Name, "error", err)
-					continue
+			switch action {
+			case "prune":
+				orphaned := getOrphanedRepos(statuses)
+				if !opts.Force {
+					names := make([]string, len(orphaned))
+					for i, r := range orphaned {
+						names[i] = r.Name
+					}
+					confirm, err := ui.ConfirmPrune(names)
+					if err != nil {
+						return nil, fmt.Errorf("failed to get confirmation: %w", err)
+					}
+					if !confirm {
+						ui.Info("prune cancelled")
+						break
+					}
 				}
-				result.Pruned++
-			}
 
-		case "add":
-			orphaned := getOrphanedRepos(statuses)
-			for _, repo := range orphaned {
-				fullName := guessFullName(source.Source, repo.Name)
-				source.Repos = append(source.Repos, fullName)
-				result.Added++
-				ui.Info("added to config", "repo", fullName)
-			}
+				for _, repo := range orphaned {
+					ui.Info("removing", "repo", repo.Name)
+					if err := os.RemoveAll(repo.LocalPath); err != nil {
+						ui.Error("failed to remove repo", "repo", repo.Name, "error", err)
+						continue
+					}
+					result.Pruned++
+				}
 
-			// Save updated config
-			if opts.ConfigPath != "" {
-				if err := cfg.Save(opts.ConfigPath); err != nil {
-					ui.Error("failed to save config", "error", err)
-				} else {
-					ui.Info("config saved", "path", opts.ConfigPath)
+			case "add":
+				orphaned := getOrphanedRepos(statuses)
+				for _, repo := range orphaned {
+					fullName := guessFullName(source.Source, repo.Name)
+					source.Repos = append(source.Repos, fullName)
+					result.Added++
+					ui.Info("added to config", "repo", fullName)
+				}
+
+				// Save updated config
+				if opts.ConfigPath != "" {
+					if err := cfg.Save(opts.ConfigPath); err != nil {
+						ui.Error("failed to save config", "error", err)
+					} else {
+						ui.Info("config saved", "path", opts.ConfigPath)
+					}
 				}
 			}
 		}
@@ -297,8 +350,14 @@ func syncSource(source *config.Source, cfg *config.Config, opts SyncOptions) (*S
 	}
 
 	if len(toClone) > 0 {
-		cloned := cloneReposParallel(toClone, source, opts.Jobs)
-		result.Cloned = cloned
+		if opts.DryRun {
+			for _, repo := range toClone {
+				ui.Info("would clone", "repo", repo.FullName, "path", repo.LocalPath)
+			}
+		} else {
+			cloned := cloneReposParallel(toClone, source, opts.Jobs)
+			result.Cloned = cloned
+		}
 	}
 
 	return result, nil
@@ -436,4 +495,161 @@ func getOrphanedRepos(statuses []RepoStatus) []RepoStatus {
 		}
 	}
 	return orphaned
+}
+
+// PullOptions contains options for the pull command
+type PullOptions struct {
+	Force bool
+	Jobs  int
+}
+
+// PullResult contains the results of a pull operation
+type PullResult struct {
+	Updated int
+	Failed  int
+	Skipped int
+}
+
+type pullJob struct {
+	path       string
+	name       string
+	privateKey string
+}
+
+type pullResult struct {
+	name    string
+	success bool
+	err     error
+}
+
+// RunPull pulls all repos for all configured sources
+func RunPull(cfg *config.Config, opts PullOptions) (*PullResult, error) {
+	result := &PullResult{}
+
+	// Load credentials from credentials.env if it exists
+	credPath := connector.DefaultCredentialsPath()
+	if err := connector.LoadCredentialsEnv(credPath); err != nil {
+		ui.Debug("failed to load credentials file", "error", err)
+	}
+
+	var allJobs []pullJob
+
+	for i := range cfg.Sources {
+		source := &cfg.Sources[i]
+
+		// Check if local_path exists
+		if _, err := os.Stat(source.LocalPath); os.IsNotExist(err) {
+			ui.Warn("skipping source - directory does not exist", "source", source.Name, "path", source.LocalPath)
+			continue
+		}
+
+		// Scan local directory for repos
+		localRepos, err := scanLocalRepos(source.LocalPath)
+		if err != nil {
+			ui.Warn("skipping source - failed to scan local repos", "source", source.Name, "error", err)
+			continue
+		}
+
+		ui.Info("found repos to pull", "source", source.Name, "count", len(localRepos))
+
+		// Add jobs for each repo
+		for repoName := range localRepos {
+			repoPath := filepath.Join(source.LocalPath, repoName)
+			allJobs = append(allJobs, pullJob{
+				path:       repoPath,
+				name:       repoName,
+				privateKey: source.GetPrivateKey(),
+			})
+		}
+	}
+
+	if len(allJobs) == 0 {
+		ui.Info("no repos to pull")
+		return result, nil
+	}
+
+	// Pull repos in parallel
+	updated, failed := pullReposParallel(allJobs, opts.Jobs)
+	result.Updated = updated
+	result.Failed = failed
+
+	return result, nil
+}
+
+func pullReposParallel(jobs []pullJob, numWorkers int) (int, int) {
+	if numWorkers <= 0 {
+		numWorkers = 4
+	}
+
+	// Don't use more workers than jobs
+	if numWorkers > len(jobs) {
+		numWorkers = len(jobs)
+	}
+
+	jobsChan := make(chan pullJob, len(jobs))
+	results := make(chan pullResult, len(jobs))
+
+	// Start progress spinner
+	progress := ui.NewProgress(len(jobs), "Pulling repos")
+
+	// Start workers
+	var wg gosync.WaitGroup
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go pullWorker(jobsChan, results, &wg)
+	}
+
+	// Send jobs
+	for _, job := range jobs {
+		jobsChan <- job
+	}
+	close(jobsChan)
+
+	// Wait for workers to finish, then close results
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect results
+	updated := 0
+	failed := 0
+	var errors []pullResult
+	for res := range results {
+		progress.Increment()
+		if res.success {
+			updated++
+		} else {
+			failed++
+			errors = append(errors, res)
+		}
+	}
+
+	// Stop spinner before printing results
+	progress.Finish()
+
+	// Print errors
+	for _, res := range errors {
+		ui.Error("failed to pull", "repo", res.name, "error", res.err)
+	}
+	if updated > 0 {
+		ui.Info("pulled repos", "count", updated)
+	}
+
+	return updated, failed
+}
+
+func pullWorker(jobs <-chan pullJob, results chan<- pullResult, wg *gosync.WaitGroup) {
+	defer wg.Done()
+	for job := range jobs {
+		err := git.Pull(git.PullOptions{
+			Path:       job.path,
+			PrivateKey: job.privateKey,
+		})
+		results <- pullResult{
+			name:    job.name,
+			success: err == nil,
+			err:     err,
+		}
+	}
 }
