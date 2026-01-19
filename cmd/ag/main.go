@@ -54,6 +54,7 @@ var (
 	syncForce      bool
 	syncJobs       int
 	configValidate bool
+	configGenerate bool
 )
 
 func init() {
@@ -68,6 +69,7 @@ func init() {
 	rootCmd.AddCommand(syncCmd)
 
 	configCmd.Flags().BoolVarP(&configValidate, "validate", "v", false, "validate config file without editing")
+	configCmd.Flags().BoolVarP(&configGenerate, "generate", "g", false, "generate default config file")
 	rootCmd.AddCommand(configCmd)
 }
 
@@ -116,6 +118,18 @@ func runConfig(cmd *cobra.Command, args []string) error {
 	path := configPath
 	if path == "" {
 		path = config.DefaultConfigPath()
+	}
+
+	// Generate only mode
+	if configGenerate {
+		if config.Exists(path) {
+			return fmt.Errorf("config file already exists: %s", path)
+		}
+		if err := config.CreateDefault(path); err != nil {
+			return fmt.Errorf("failed to create config: %w", err)
+		}
+		ui.Info("config created", "path", path)
+		return nil
 	}
 
 	// Validate only mode

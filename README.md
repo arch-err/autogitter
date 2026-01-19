@@ -12,38 +12,53 @@ Or download from [releases](https://github.com/arch-err/autogitter/releases).
 
 ## Quick Start
 
-Create `~/.config/autogitter/config.yaml`:
+1. **Generate and edit your config:**
+
+```bash
+ag config
+```
+
+This opens your config file in `$EDITOR`. Configure your sources:
 
 ```yaml
 sources:
-  - name: "Github"
-    source: github.com/arch-err
+  - name: "GitHub"
+    source: github.com/your-username
     strategy: manual
-    repos:
-      - arch-err/autogitter
     local_path: "~/Git/github"
+    repos:
+      - your-username/repo1
+      - your-username/repo2
 ```
 
-Run sync:
+2. **Sync your repositories:**
 
 ```bash
 ag sync
 ```
+
+That's it! Your repos will be cloned to the specified `local_path`.
 
 ## Usage
 
 ```bash
-# Interactive sync
+# Edit config
+ag config
+
+# Validate config
+ag config --validate
+
+# Sync repositories
 ag sync
 
-# Prune orphaned repos
+# Sync with 8 parallel workers
+ag sync -j 8
+
+# Prune repos not in config
 ag sync --prune
 
 # Add orphaned repos to config
 ag sync --add
-
-# Custom config file
-ag sync -c /path/to/config.yaml
 ```
 
 ## Documentation

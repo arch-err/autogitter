@@ -51,12 +51,16 @@ ag config [flags]
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--validate` | `-v` | Validate config without editing |
+| `--generate` | `-g` | Generate default config file (fails if exists) |
 
 **Examples:**
 
 ```bash
-# Edit config in $EDITOR
+# Edit config in $EDITOR (creates default if missing)
 ag config
+
+# Generate config without opening editor
+ag config --generate
 
 # Validate config file
 ag config --validate
