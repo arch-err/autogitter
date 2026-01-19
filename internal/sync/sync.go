@@ -75,6 +75,24 @@ func Run(cfg *config.Config, opts SyncOptions) (*SyncResult, error) {
 func syncSource(source *config.Source, cfg *config.Config, opts SyncOptions) (*SyncResult, error) {
 	result := &SyncResult{}
 
+	// Check if local_path exists, prompt to create if not
+	if _, err := os.Stat(source.LocalPath); os.IsNotExist(err) {
+		if !opts.Force {
+			create, promptErr := ui.ConfirmCreateDir(source.LocalPath)
+			if promptErr != nil {
+				return nil, fmt.Errorf("failed to get user input: %w", promptErr)
+			}
+			if !create {
+				ui.Info("skipping source", "source", source.Name, "reason", "directory not created")
+				return result, nil
+			}
+		}
+		if err := os.MkdirAll(source.LocalPath, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create directory: %w", err)
+		}
+		ui.Info("created directory", "path", source.LocalPath)
+	}
+
 	// Get configured repos
 	configuredRepos := make(map[string]bool)
 	for _, repo := range source.Repos {

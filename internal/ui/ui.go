@@ -126,6 +126,19 @@ func ConfirmSync(toClone int, toRemove int) (bool, error) {
 	return confirm, err
 }
 
+func ConfirmCreateDir(path string) (bool, error) {
+	var confirm bool
+	err := huh.NewConfirm().
+		Title(fmt.Sprintf("Directory does not exist: %s", path)).
+		Description("Would you like to create it?").
+		Affirmative("Yes, create").
+		Negative("No, skip").
+		Value(&confirm).
+		Run()
+
+	return confirm, err
+}
+
 func PrintSummary(cloned, pruned, skipped int) {
 	fmt.Println()
 	fmt.Println(HeaderStyle.Render("Summary"))
