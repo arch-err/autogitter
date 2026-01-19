@@ -13,25 +13,17 @@
 ## Quick Start
 
 ```bash
-# Install
+# 1. Install
 go install github.com/arch-err/autogitter/cmd/ag@latest
 
-# Create config
-mkdir -p ~/.config/autogitter
-cat > ~/.config/autogitter/config.yaml << 'EOF'
-sources:
-  - name: "Github"
-    source: github.com/your-username
-    strategy: manual
-    repos:
-      - your-username/repo1
-      - your-username/repo2
-    local_path: "~/Git/github"
-EOF
+# 2. Generate and edit your config
+ag config
 
-# Sync
+# 3. Sync your repositories
 ag sync
 ```
+
+The `ag config` command will create a default config template and open it in your editor. Configure your sources, save, and you're ready to sync!
 
 ## Documentation
 

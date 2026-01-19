@@ -161,3 +161,46 @@ func (c *Config) Save(path string) error {
 
 	return nil
 }
+
+// Exists checks if a config file exists at the given path
+func Exists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// DefaultTemplate is the template for new config files
+const DefaultTemplate = `# Autogitter Configuration
+# See documentation at https://arch-err.github.io/autogitter/configuration
+
+sources:
+  # Example source configuration
+  - name: "GitHub"
+    source: github.com/your-username
+    strategy: manual
+    local_path: "~/Git/github"
+    # branch: main  # optional, defaults to main
+    # private_key: "~/.ssh/id_rsa"  # optional, for private repos
+    repos:
+      - your-username/repo1
+      - your-username/repo2
+`
+
+// CreateDefault creates a default config file at the given path
+func CreateDefault(path string) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
+	if err := os.WriteFile(path, []byte(DefaultTemplate), 0644); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	return nil
+}
+
+// ValidateFile validates a config file without loading it fully
+func ValidateFile(path string) error {
+	_, err := Load(path)
+	return err
+}

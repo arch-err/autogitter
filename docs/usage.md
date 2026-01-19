@@ -17,6 +17,7 @@ ag sync [flags]
 | `--prune` | `-p` | Delete repos not in config (confirms first) |
 | `--add` | `-a` | Add orphaned repos to config |
 | `--force` | | Skip confirmation prompts |
+| `--jobs` | `-j` | Number of parallel clone workers (default: 4) |
 
 **Examples:**
 
@@ -32,7 +33,45 @@ ag sync --add
 
 # Prune without confirmation
 ag sync --prune --force
+
+# Clone with 8 parallel workers
+ag sync -j 8
 ```
+
+### config
+
+Edit or validate the configuration file.
+
+```bash
+ag config [flags]
+```
+
+**Flags:**
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--validate` | `-v` | Validate config without editing |
+| `--generate` | `-g` | Generate default config file (fails if exists) |
+
+**Examples:**
+
+```bash
+# Edit config in $EDITOR (creates default if missing)
+ag config
+
+# Generate config without opening editor
+ag config --generate
+
+# Validate config file
+ag config --validate
+
+# Validate a specific config file
+ag config -v -c /path/to/config.yaml
+```
+
+- Opens config in `$EDITOR` (falls back to `vim`, `nano`, or `vi`)
+- Creates a default template if config doesn't exist
+- Validates config after editing; prompts to re-edit if invalid
 
 ## Global Flags
 
