@@ -4,7 +4,7 @@
 
 ### connect
 
-Configure API authentication for GitHub, Gitea, or other Git providers.
+Configure API authentication for GitHub, Gitea, Bitbucket, or other Git providers.
 
 ```bash
 ag connect [flags]
@@ -14,7 +14,7 @@ ag connect [flags]
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--type` | `-t` | Connector type (github, gitea) |
+| `--type` | `-t` | Connector type (github, gitea, bitbucket) |
 | `--host` | `-H` | Git server host (e.g., gitea.company.com) |
 | `--token` | `-T` | API token (skips interactive prompt) |
 | `--list` | `-l` | List configured connections |
@@ -33,6 +33,9 @@ ag connect --type github --token ghp_xxxx
 
 # Non-interactive Gitea setup
 ag connect --type gitea --host gitea.company.com --token xxxx
+
+# Non-interactive Bitbucket setup
+ag connect --type bitbucket --token xxxx
 ```
 
 Tokens are stored in `$XDG_DATA_HOME/autogitter/credentials.env` (typically `~/.local/share/autogitter/credentials.env`).

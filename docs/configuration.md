@@ -37,7 +37,7 @@ sources:
 | `name` | Yes | Display name for the source |
 | `source` | Yes | Git host and user/org (e.g., `github.com/username`) |
 | `strategy` | Yes | Sync strategy: `manual`, `all`, or `file` |
-| `type` | No | Provider type: `github`, `gitea` (auto-detected from host if omitted) |
+| `type` | No | Provider type: `github`, `gitea`, `bitbucket` (auto-detected from host if omitted) |
 | `local_path` | Yes | Where to clone repos (supports `$HOME`, `~`) |
 | `repos` | For manual | List of repos to sync |
 | `private_key` | No | Path to SSH key for this source |
@@ -92,11 +92,13 @@ Tokens are stored in `$XDG_DATA_HOME/autogitter/credentials.env` and loaded auto
 |----------|---------------------|
 | GitHub | `GITHUB_TOKEN` |
 | Gitea | `GITEA_TOKEN` |
+| Bitbucket | `BITBUCKET_TOKEN` |
 
 You can also export these variables directly:
 
 ```bash
 export GITHUB_TOKEN=ghp_xxxx
+export BITBUCKET_TOKEN=xxxx
 ag sync
 ```
 

@@ -22,14 +22,20 @@ type FileStrategy struct {
 	Filename string `yaml:"filename"`
 }
 
+type SSHOptions struct {
+	Port       int    `yaml:"port,omitempty"`
+	PrivateKey string `yaml:"private_key,omitempty"`
+}
+
 type Source struct {
 	Name         string       `yaml:"name"`
 	Source       string       `yaml:"source"`
 	Strategy     Strategy     `yaml:"strategy"`
-	Type         string       `yaml:"type,omitempty"` // "github", "gitea", or auto-detect from host
+	Type         string       `yaml:"type,omitempty"` // "github", "gitea", "bitbucket", or auto-detect from host
 	FileStrategy FileStrategy `yaml:"file_strategy,omitempty"`
 	LocalPath    string       `yaml:"local_path"`
-	PrivateKey   string       `yaml:"private_key,omitempty"`
+	SSHOptions   SSHOptions   `yaml:"ssh_options,omitempty"`
+	PrivateKey   string       `yaml:"private_key,omitempty"` // deprecated: use ssh_options.private_key
 	Branch       string       `yaml:"branch,omitempty"`
 	Repos        []string     `yaml:"repos,omitempty"`
 }
@@ -114,6 +120,9 @@ func (c *Config) ExpandPaths() {
 		if c.Sources[i].PrivateKey != "" {
 			c.Sources[i].PrivateKey = expandPath(c.Sources[i].PrivateKey)
 		}
+		if c.Sources[i].SSHOptions.PrivateKey != "" {
+			c.Sources[i].SSHOptions.PrivateKey = expandPath(c.Sources[i].SSHOptions.PrivateKey)
+		}
 	}
 }
 
@@ -136,9 +145,24 @@ func (s *Source) GetBranch() string {
 }
 
 func (s *Source) GetRepoURL(repo string) string {
-	// Extract just the host from the source (e.g., "github.com" from "github.com/user")
 	host := s.GetHost()
+
+	// If custom SSH port is specified, use ssh:// URL format
+	if s.SSHOptions.Port > 0 {
+		return fmt.Sprintf("ssh://git@%s:%d/%s.git", host, s.SSHOptions.Port, repo)
+	}
+
+	// Standard git@ URL format
 	return fmt.Sprintf("git@%s:%s.git", host, repo)
+}
+
+// GetPrivateKey returns the SSH private key path, checking both locations
+func (s *Source) GetPrivateKey() string {
+	// Prefer ssh_options.private_key over deprecated top-level private_key
+	if s.SSHOptions.PrivateKey != "" {
+		return s.SSHOptions.PrivateKey
+	}
+	return s.PrivateKey
 }
 
 // GetHost extracts the host from the source field
@@ -167,6 +191,8 @@ func (s *Source) GetConnectorType() connector.ConnectorType {
 			return connector.ConnectorGitHub
 		case "gitea":
 			return connector.ConnectorGitea
+		case "bitbucket":
+			return connector.ConnectorBitbucket
 		}
 	}
 	// Otherwise, auto-detect from host
@@ -208,7 +234,9 @@ sources:
     strategy: manual
     local_path: "~/Git/github"
     # branch: main  # optional, uses remote default if not set
-    # private_key: "~/.ssh/id_rsa"  # optional, for private repos
+    # ssh_options:
+    #   port: 22  # optional, for non-standard SSH port
+    #   private_key: "~/.ssh/id_rsa"  # optional, for private repos
     repos:
       - your-username/repo1
       - your-username/repo2

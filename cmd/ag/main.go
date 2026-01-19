@@ -86,7 +86,7 @@ func init() {
 	configCmd.Flags().BoolVarP(&configGenerate, "generate", "g", false, "generate default config file")
 	rootCmd.AddCommand(configCmd)
 
-	connectCmd.Flags().StringVarP(&connectType, "type", "t", "", "connector type (github, gitea)")
+	connectCmd.Flags().StringVarP(&connectType, "type", "t", "", "connector type (github|gitea|bitbucket)")
 	connectCmd.Flags().StringVarP(&connectHost, "host", "H", "", "git server host (e.g., gitea.company.com)")
 	connectCmd.Flags().StringVarP(&connectToken, "token", "T", "", "API token (skips interactive prompt)")
 	connectCmd.Flags().BoolVarP(&connectList, "list", "l", false, "list configured connections")
@@ -249,14 +249,29 @@ func runConnect(cmd *cobra.Command, args []string) error {
 		case "github":
 			connType = connector.ConnectorGitHub
 			host = "github.com"
+			if connectHost != "" {
+				host = strings.TrimPrefix(connectHost, "https://")
+				host = strings.TrimPrefix(host, "http://")
+				host = strings.TrimSuffix(host, "/")
+			}
 		case "gitea":
 			connType = connector.ConnectorGitea
 			if connectHost == "" {
-				return fmt.Errorf("--host is required for gitea connector")
+				host = "gitea.com"
+			} else {
+				host = strings.TrimPrefix(connectHost, "https://")
+				host = strings.TrimPrefix(host, "http://")
+				host = strings.TrimSuffix(host, "/")
 			}
-			host = strings.TrimPrefix(connectHost, "https://")
-			host = strings.TrimPrefix(host, "http://")
-			host = strings.TrimSuffix(host, "/")
+		case "bitbucket":
+			connType = connector.ConnectorBitbucket
+			if connectHost == "" {
+				host = "bitbucket.org"
+			} else {
+				host = strings.TrimPrefix(connectHost, "https://")
+				host = strings.TrimPrefix(host, "http://")
+				host = strings.TrimSuffix(host, "/")
+			}
 		default:
 			return fmt.Errorf("unknown connector type: %s", connectType)
 		}
@@ -308,6 +323,7 @@ func interactiveConnect() (connector.ConnectorType, string, string, error) {
 		Options(
 			huh.NewOption("GitHub (github.com)", "github"),
 			huh.NewOption("Gitea (gitea.com)", "gitea"),
+			huh.NewOption("Bitbucket (bitbucket.org)", "bitbucket"),
 			huh.NewOption("Custom (self-hosted)", "custom"),
 		).
 		Value(&typeChoice).
@@ -330,6 +346,10 @@ func interactiveConnect() (connector.ConnectorType, string, string, error) {
 		connType = connector.ConnectorGitea
 		host = "gitea.com"
 		tokenURL = "https://gitea.com/user/settings/applications"
+	case "bitbucket":
+		connType = connector.ConnectorBitbucket
+		host = "bitbucket.org"
+		tokenURL = "https://bitbucket.org/account/settings/app-passwords/"
 	case "custom":
 		// Ask for host
 		err := huh.NewInput().
@@ -358,6 +378,7 @@ func interactiveConnect() (connector.ConnectorType, string, string, error) {
 			Options(
 				huh.NewOption("GitHub Enterprise", "github"),
 				huh.NewOption("Gitea", "gitea"),
+				huh.NewOption("Bitbucket Server", "bitbucket"),
 			).
 			Value(&providerType).
 			Run()
@@ -373,18 +394,27 @@ func interactiveConnect() (connector.ConnectorType, string, string, error) {
 		case "gitea":
 			connType = connector.ConnectorGitea
 			tokenURL = fmt.Sprintf("https://%s/user/settings/applications", host)
+		case "bitbucket":
+			connType = connector.ConnectorBitbucket
+			tokenURL = fmt.Sprintf("https://%s/account", host)
 		}
 	}
 
 	// Show token generation instructions
 	fmt.Println()
-	fmt.Printf("Generate a personal access token at:\n")
+	fmt.Printf("Generate an access token at:\n")
 	fmt.Printf("  %s\n", tokenURL)
+	if connType == connector.ConnectorBitbucket && host != "bitbucket.org" {
+		fmt.Printf("  (click 'HTTP access tokens' in the menu)\n")
+	}
 	fmt.Println()
-	fmt.Printf("Required scopes:\n")
-	if connType == connector.ConnectorGitHub {
+	fmt.Printf("Required permissions:\n")
+	switch connType {
+	case connector.ConnectorGitHub:
 		fmt.Printf("  - repo (Full control of private repositories)\n")
-	} else {
+	case connector.ConnectorBitbucket:
+		fmt.Printf("  - Repository: Read\n")
+	default:
 		fmt.Printf("  - read:user (to verify authentication)\n")
 		fmt.Printf("  - read:repository (to list repositories)\n")
 	}
@@ -393,7 +423,7 @@ func interactiveConnect() (connector.ConnectorType, string, string, error) {
 	// Prompt for token
 	var token string
 	err = huh.NewInput().
-		Title("Enter your personal access token").
+		Title("Enter your access token").
 		EchoMode(huh.EchoModePassword).
 		Value(&token).
 		Run()
@@ -415,19 +445,30 @@ func listConnections() error {
 	fmt.Println("Configured connections:")
 	fmt.Println()
 
+	hasAny := false
+
 	// Check GitHub
 	if token := connector.GetToken(connector.ConnectorGitHub); token != "" {
 		masked := maskToken(token)
-		fmt.Printf("  GitHub: %s\n", masked)
+		fmt.Printf("  GitHub:    %s\n", masked)
+		hasAny = true
 	}
 
 	// Check Gitea
 	if token := connector.GetToken(connector.ConnectorGitea); token != "" {
 		masked := maskToken(token)
-		fmt.Printf("  Gitea:  %s\n", masked)
+		fmt.Printf("  Gitea:     %s\n", masked)
+		hasAny = true
 	}
 
-	if connector.GetToken(connector.ConnectorGitHub) == "" && connector.GetToken(connector.ConnectorGitea) == "" {
+	// Check Bitbucket
+	if token := connector.GetToken(connector.ConnectorBitbucket); token != "" {
+		masked := maskToken(token)
+		fmt.Printf("  Bitbucket: %s\n", masked)
+		hasAny = true
+	}
+
+	if !hasAny {
 		fmt.Println("  No connections configured.")
 		fmt.Println()
 		fmt.Println("Run 'ag connect' to set up a connection.")
