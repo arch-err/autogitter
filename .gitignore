@@ -1,0 +1,16 @@
+# Build artifacts
+build/
+dist/
+
+# Task cache
+.task/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test artifacts
+test_Git/
+coverage.out

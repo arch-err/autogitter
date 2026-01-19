@@ -3,10 +3,13 @@ package ui
 import (
 	"fmt"
 	"os"
+	"sync"
+	"time"
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
+	"golang.org/x/term"
 )
 
 var (
@@ -152,4 +155,82 @@ func Error(msg string, args ...interface{}) {
 
 func Debug(msg string, args ...interface{}) {
 	Logger.Debug(msg, args...)
+}
+
+// Progress tracks cloning progress with an animated spinner
+type Progress struct {
+	total     int
+	completed int
+	message   string
+	mu        sync.Mutex
+	done      chan struct{}
+	isTTY     bool
+}
+
+var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
+// NewProgress creates a new progress tracker
+func NewProgress(total int, message string) *Progress {
+	p := &Progress{
+		total:   total,
+		message: message,
+		done:    make(chan struct{}),
+		isTTY:   term.IsTerminal(int(os.Stdout.Fd())),
+	}
+
+	if p.isTTY {
+		go p.animate()
+	} else {
+		fmt.Printf("%s (0/%d)\n", message, total)
+	}
+
+	return p
+}
+
+func (p *Progress) animate() {
+	frame := 0
+	ticker := time.NewTicker(80 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-p.done:
+			// Clear the spinner line
+			fmt.Print("\r\033[K")
+			return
+		case <-ticker.C:
+			p.mu.Lock()
+			spinner := spinnerFrames[frame%len(spinnerFrames)]
+			fmt.Printf("\r%s %s (%d/%d)", spinner, p.message, p.completed, p.total)
+			p.mu.Unlock()
+			frame++
+		}
+	}
+}
+
+// Increment marks one more item as completed
+func (p *Progress) Increment() {
+	p.mu.Lock()
+	p.completed++
+	completed := p.completed
+	total := p.total
+	p.mu.Unlock()
+
+	if !p.isTTY {
+		fmt.Printf("%s (%d/%d)\n", p.message, completed, total)
+	}
+}
+
+// Finish stops the progress animation
+func (p *Progress) Finish() {
+	if p.isTTY {
+		close(p.done)
+		// Small delay to ensure animation goroutine exits
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// IsTTY returns whether we're running in an interactive terminal
+func IsTTY() bool {
+	return term.IsTerminal(int(os.Stdout.Fd()))
 }

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	gosync "sync"
 
 	"github.com/arch-err/autogitter/internal/config"
 	"github.com/arch-err/autogitter/internal/git"
@@ -16,6 +17,18 @@ type SyncOptions struct {
 	Add        bool
 	Force      bool
 	ConfigPath string
+	Jobs       int
+}
+
+type cloneJob struct {
+	status RepoStatus
+	source *config.Source
+}
+
+type cloneResult struct {
+	name    string
+	success bool
+	err     error
 }
 
 type SyncResult struct {
@@ -201,27 +214,98 @@ func syncSource(source *config.Source, cfg *config.Config, opts SyncOptions) (*S
 		}
 	}
 
-	// Clone new repos
+	// Clone new repos in parallel
+	var toClone []RepoStatus
 	for _, status := range statuses {
-		if status.Status != ui.StatusAdded {
-			continue
+		if status.Status == ui.StatusAdded {
+			toClone = append(toClone, status)
 		}
+	}
 
-		ui.Info("cloning", "repo", status.FullName)
-		err := git.Clone(git.CloneOptions{
-			URL:        source.GetRepoURL(status.FullName),
-			Path:       status.LocalPath,
-			Branch:     source.GetBranch(),
-			PrivateKey: source.PrivateKey,
-		})
-		if err != nil {
-			ui.Error("failed to clone", "repo", status.FullName, "error", err)
-			continue
-		}
-		result.Cloned++
+	if len(toClone) > 0 {
+		cloned := cloneReposParallel(toClone, source, opts.Jobs)
+		result.Cloned = cloned
 	}
 
 	return result, nil
+}
+
+func cloneReposParallel(repos []RepoStatus, source *config.Source, numWorkers int) int {
+	if numWorkers <= 0 {
+		numWorkers = 4
+	}
+
+	// Don't use more workers than repos
+	if numWorkers > len(repos) {
+		numWorkers = len(repos)
+	}
+
+	jobs := make(chan cloneJob, len(repos))
+	results := make(chan cloneResult, len(repos))
+
+	// Start progress spinner
+	progress := ui.NewProgress(len(repos), "Cloning repos")
+
+	// Start workers
+	var wg gosync.WaitGroup
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go cloneWorker(jobs, results, &wg)
+	}
+
+	// Send jobs
+	for _, repo := range repos {
+		jobs <- cloneJob{status: repo, source: source}
+	}
+	close(jobs)
+
+	// Wait for workers to finish, then close results
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect results
+	cloned := 0
+	var errors []cloneResult
+	for res := range results {
+		progress.Increment()
+		if res.success {
+			cloned++
+		} else {
+			errors = append(errors, res)
+		}
+	}
+
+	// Stop spinner before printing results
+	progress.Finish()
+
+	// Print results
+	for _, res := range errors {
+		ui.Error("failed to clone", "repo", res.name, "error", res.err)
+	}
+	if cloned > 0 {
+		ui.Info("cloned repos", "count", cloned)
+	}
+
+	return cloned
+}
+
+func cloneWorker(jobs <-chan cloneJob, results chan<- cloneResult, wg *gosync.WaitGroup) {
+	defer wg.Done()
+	for job := range jobs {
+		err := git.Clone(git.CloneOptions{
+			URL:        job.source.GetRepoURL(job.status.FullName),
+			Path:       job.status.LocalPath,
+			Branch:     job.source.GetBranch(),
+			PrivateKey: job.source.PrivateKey,
+		})
+		results <- cloneResult{
+			name:    job.status.FullName,
+			success: err == nil,
+			err:     err,
+		}
+	}
 }
 
 func scanLocalRepos(path string) (map[string]bool, error) {
