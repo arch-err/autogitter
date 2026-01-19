@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-01-19
+
+### Added
+
+- `pull` command to update existing repos with `git pull`
+- `--dry-run` / `-n` flag for sync command to preview changes
+- `regex` strategy for filtering repos by pattern
+- Parallel pull with configurable workers (`-j/--jobs` flag)
+
 ## [0.2.0] - 2026-01-19
 
 ### Added
@@ -41,6 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MkDocs documentation with Material theme
 - GitHub Actions for build, release, and docs deployment
 
-[Unreleased]: https://github.com/arch-err/autogitter/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/arch-err/autogitter/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/arch-err/autogitter/compare/v0.5.0...v0.6.0
 [0.2.0]: https://github.com/arch-err/autogitter/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/arch-err/autogitter/releases/tag/v0.1.0
