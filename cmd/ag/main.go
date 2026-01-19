@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/arch-err/autogitter/internal/config"
+	"github.com/arch-err/autogitter/internal/connector"
 	"github.com/arch-err/autogitter/internal/sync"
 	"github.com/arch-err/autogitter/internal/ui"
 	"github.com/charmbracelet/huh"
@@ -13,7 +16,7 @@ import (
 )
 
 var (
-	version    = "0.2.0"
+	version    = "0.3.0"
 	configPath string
 	debug      bool
 )
@@ -48,6 +51,13 @@ var configCmd = &cobra.Command{
 	RunE:  runConfig,
 }
 
+var connectCmd = &cobra.Command{
+	Use:   "connect",
+	Short: "Configure API authentication",
+	Long:  `Set up API tokens for GitHub, Gitea, or other Git providers to enable the "all" and "file" sync strategies.`,
+	RunE:  runConnect,
+}
+
 var (
 	syncPrune      bool
 	syncAdd        bool
@@ -55,6 +65,10 @@ var (
 	syncJobs       int
 	configValidate bool
 	configGenerate bool
+	connectType    string
+	connectHost    string
+	connectToken   string
+	connectList    bool
 )
 
 func init() {
@@ -71,6 +85,12 @@ func init() {
 	configCmd.Flags().BoolVarP(&configValidate, "validate", "v", false, "validate config file without editing")
 	configCmd.Flags().BoolVarP(&configGenerate, "generate", "g", false, "generate default config file")
 	rootCmd.AddCommand(configCmd)
+
+	connectCmd.Flags().StringVarP(&connectType, "type", "t", "", "connector type (github, gitea)")
+	connectCmd.Flags().StringVarP(&connectHost, "host", "H", "", "git server host (e.g., gitea.company.com)")
+	connectCmd.Flags().StringVarP(&connectToken, "token", "T", "", "API token (skips interactive prompt)")
+	connectCmd.Flags().BoolVarP(&connectList, "list", "l", false, "list configured connections")
+	rootCmd.AddCommand(connectCmd)
 }
 
 func loadConfig() (*config.Config, string, error) {
@@ -207,4 +227,221 @@ func getEditor() string {
 		}
 	}
 	return "vi" // fallback
+}
+
+func runConnect(cmd *cobra.Command, args []string) error {
+	// Load existing credentials
+	credPath := connector.DefaultCredentialsPath()
+	connector.LoadCredentialsEnv(credPath)
+
+	// List mode
+	if connectList {
+		return listConnections()
+	}
+
+	var connType connector.ConnectorType
+	var host string
+	var token string
+
+	// Non-interactive mode if type and token are provided
+	if connectType != "" && connectToken != "" {
+		switch connectType {
+		case "github":
+			connType = connector.ConnectorGitHub
+			host = "github.com"
+		case "gitea":
+			connType = connector.ConnectorGitea
+			if connectHost == "" {
+				return fmt.Errorf("--host is required for gitea connector")
+			}
+			host = strings.TrimPrefix(connectHost, "https://")
+			host = strings.TrimPrefix(host, "http://")
+			host = strings.TrimSuffix(host, "/")
+		default:
+			return fmt.Errorf("unknown connector type: %s", connectType)
+		}
+		token = connectToken
+	} else {
+		// Interactive mode
+		var err error
+		connType, host, token, err = interactiveConnect()
+		if err != nil {
+			return err
+		}
+	}
+
+	// Test the connection
+	ui.Info("testing connection...")
+	conn, err := connector.New(connType, host, token)
+	if err != nil {
+		return fmt.Errorf("failed to create connector: %w", err)
+	}
+
+	ctx := context.Background()
+	if err := conn.TestConnection(ctx); err != nil {
+		ui.Error("connection test failed", "error", err)
+		return fmt.Errorf("connection test failed: %w", err)
+	}
+
+	ui.Info("connection successful")
+
+	// Save the credential
+	envVar := connector.GetEnvVarName(connType)
+	if err := connector.SaveCredential(credPath, envVar, token); err != nil {
+		return fmt.Errorf("failed to save credential: %w", err)
+	}
+
+	ui.Info("credential saved", "path", credPath)
+	fmt.Println()
+	fmt.Printf("To use in the current session, run:\n")
+	fmt.Printf("  export %s=%s\n", envVar, token)
+	fmt.Println()
+
+	return nil
+}
+
+func interactiveConnect() (connector.ConnectorType, string, string, error) {
+	// Select connector type
+	var typeChoice string
+	err := huh.NewSelect[string]().
+		Title("Select Git provider").
+		Options(
+			huh.NewOption("GitHub (github.com)", "github"),
+			huh.NewOption("Gitea (gitea.com)", "gitea"),
+			huh.NewOption("Custom (self-hosted)", "custom"),
+		).
+		Value(&typeChoice).
+		Run()
+
+	if err != nil {
+		return "", "", "", err
+	}
+
+	var connType connector.ConnectorType
+	var host string
+	var tokenURL string
+
+	switch typeChoice {
+	case "github":
+		connType = connector.ConnectorGitHub
+		host = "github.com"
+		tokenURL = "https://github.com/settings/tokens/new?description=autogitter&scopes=repo"
+	case "gitea":
+		connType = connector.ConnectorGitea
+		host = "gitea.com"
+		tokenURL = "https://gitea.com/user/settings/applications"
+	case "custom":
+		// Ask for host
+		err := huh.NewInput().
+			Title("Enter server host").
+			Placeholder("git.example.com").
+			Value(&host).
+			Run()
+
+		if err != nil {
+			return "", "", "", err
+		}
+
+		if host == "" {
+			return "", "", "", fmt.Errorf("host is required")
+		}
+
+		// Strip protocol prefix if present
+		host = strings.TrimPrefix(host, "https://")
+		host = strings.TrimPrefix(host, "http://")
+		host = strings.TrimSuffix(host, "/")
+
+		// Ask for provider type
+		var providerType string
+		err = huh.NewSelect[string]().
+			Title("Select provider type").
+			Options(
+				huh.NewOption("GitHub Enterprise", "github"),
+				huh.NewOption("Gitea", "gitea"),
+			).
+			Value(&providerType).
+			Run()
+
+		if err != nil {
+			return "", "", "", err
+		}
+
+		switch providerType {
+		case "github":
+			connType = connector.ConnectorGitHub
+			tokenURL = fmt.Sprintf("https://%s/settings/tokens/new", host)
+		case "gitea":
+			connType = connector.ConnectorGitea
+			tokenURL = fmt.Sprintf("https://%s/user/settings/applications", host)
+		}
+	}
+
+	// Show token generation instructions
+	fmt.Println()
+	fmt.Printf("Generate a personal access token at:\n")
+	fmt.Printf("  %s\n", tokenURL)
+	fmt.Println()
+	fmt.Printf("Required scopes:\n")
+	if connType == connector.ConnectorGitHub {
+		fmt.Printf("  - repo (Full control of private repositories)\n")
+	} else {
+		fmt.Printf("  - read:user (to verify authentication)\n")
+		fmt.Printf("  - read:repository (to list repositories)\n")
+	}
+	fmt.Println()
+
+	// Prompt for token
+	var token string
+	err = huh.NewInput().
+		Title("Enter your personal access token").
+		EchoMode(huh.EchoModePassword).
+		Value(&token).
+		Run()
+
+	if err != nil {
+		return "", "", "", err
+	}
+
+	if token == "" {
+		return "", "", "", fmt.Errorf("token is required")
+	}
+
+	return connType, host, token, nil
+}
+
+func listConnections() error {
+	credPath := connector.DefaultCredentialsPath()
+
+	fmt.Println("Configured connections:")
+	fmt.Println()
+
+	// Check GitHub
+	if token := connector.GetToken(connector.ConnectorGitHub); token != "" {
+		masked := maskToken(token)
+		fmt.Printf("  GitHub: %s\n", masked)
+	}
+
+	// Check Gitea
+	if token := connector.GetToken(connector.ConnectorGitea); token != "" {
+		masked := maskToken(token)
+		fmt.Printf("  Gitea:  %s\n", masked)
+	}
+
+	if connector.GetToken(connector.ConnectorGitHub) == "" && connector.GetToken(connector.ConnectorGitea) == "" {
+		fmt.Println("  No connections configured.")
+		fmt.Println()
+		fmt.Println("Run 'ag connect' to set up a connection.")
+	}
+
+	fmt.Println()
+	fmt.Printf("Credentials file: %s\n", credPath)
+
+	return nil
+}
+
+func maskToken(token string) string {
+	if len(token) <= 8 {
+		return "****"
+	}
+	return token[:4] + "****" + token[len(token)-4:]
 }
