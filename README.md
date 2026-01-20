@@ -1,55 +1,130 @@
-# autogitter
+<p align="center">
+  <!-- Logo placeholder - replace with your logo -->
+  <img src="docs/assets/logo.png" alt="Autogitter Logo" width="200">
+</p>
 
-Git repository synchronization tool.
+<h1 align="center">Autogitter</h1>
+
+<p align="center">
+  <strong>Git repository synchronization tool for managing multiple repos across providers</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/arch-err/autogitter/releases/latest"><img src="https://img.shields.io/github/v/release/arch-err/autogitter?style=flat-square&color=orange" alt="Release"></a>
+  <a href="https://github.com/arch-err/autogitter/actions/workflows/build.yaml"><img src="https://img.shields.io/github/actions/workflow/status/arch-err/autogitter/build.yaml?style=flat-square" alt="Build"></a>
+  <a href="https://github.com/arch-err/autogitter/blob/main/LICENSE"><img src="https://img.shields.io/github/license/arch-err/autogitter?style=flat-square" alt="License"></a>
+  <a href="https://goreportcard.com/report/github.com/arch-err/autogitter"><img src="https://goreportcard.com/badge/github.com/arch-err/autogitter?style=flat-square" alt="Go Report"></a>
+</p>
+
+<p align="center">
+  <a href="https://arch-err.github.io/autogitter">Documentation</a> •
+  <a href="#installation">Installation</a> •
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#features">Features</a>
+</p>
+
+---
+
+## Features
+
+| Feature | Description |
+|---------|-------------|
+| **Multi-Provider** | GitHub, Gitea, and Bitbucket (Cloud + Server) |
+| **Sync Strategies** | `manual` (explicit list), `all` (fetch from API), `regex` (pattern matching) |
+| **Parallel Operations** | Clone and pull with configurable worker pools |
+| **Remote Configs** | Load config from HTTP/HTTPS URLs or SSH paths |
+| **Dry Run** | Preview changes before applying them |
+| **Interactive CLI** | Beautiful diffs, prompts, and progress indicators |
+| **SSH Options** | Custom ports and private keys per source |
 
 ## Installation
+
+### From Releases (Recommended)
+
+Download the latest binary from the [releases page](https://github.com/arch-err/autogitter/releases).
+
+```bash
+# Linux (amd64)
+curl -L https://github.com/arch-err/autogitter/releases/latest/download/ag-linux-amd64 -o ag
+chmod +x ag
+sudo mv ag /usr/local/bin/
+
+# macOS (Apple Silicon)
+curl -L https://github.com/arch-err/autogitter/releases/latest/download/ag-darwin-arm64 -o ag
+chmod +x ag
+sudo mv ag /usr/local/bin/
+
+# Windows - download ag-windows-amd64.exe from releases
+```
+
+### From Source
 
 ```bash
 go install github.com/arch-err/autogitter/cmd/ag@latest
 ```
 
-Or download from [releases](https://github.com/arch-err/autogitter/releases).
-
 ## Quick Start
 
-1. **Generate and edit your config:**
+**1. Set up authentication (for `all`/`regex` strategies):**
+
+```bash
+ag connect
+```
+
+**2. Create your config:**
 
 ```bash
 ag config
 ```
 
-This opens your config file in `$EDITOR`. Configure your sources:
+This opens your config in `$EDITOR`. Example configuration:
 
 ```yaml
 sources:
+  # Sync all repos from a GitHub user
   - name: "GitHub"
     source: github.com/your-username
-    strategy: manual
+    strategy: all
     local_path: "~/Git/github"
+
+  # Sync specific repos manually
+  - name: "Work"
+    source: gitea.company.com/myteam
+    strategy: manual
+    local_path: "~/Git/work"
     repos:
-      - your-username/repo1
-      - your-username/repo2
+      - myteam/project-alpha
+      - myteam/project-beta
+
+  # Sync repos matching a pattern
+  - name: "APIs"
+    source: github.com/myorg
+    strategy: regex
+    local_path: "~/Git/apis"
+    regex_strategy:
+      pattern: "^myorg/api-.*"
 ```
 
-2. **Sync your repositories:**
+**3. Sync your repositories:**
 
 ```bash
 ag sync
 ```
 
-That's it! Your repos will be cloned to the specified `local_path`.
+**4. Keep repos updated:**
+
+```bash
+ag pull
+```
 
 ## Usage
 
 ```bash
-# Edit config
-ag config
-
-# Validate config
-ag config --validate
-
-# Sync repositories
+# Sync repositories (clone new, detect orphaned)
 ag sync
+
+# Preview what would happen
+ag sync --dry-run
 
 # Sync with 8 parallel workers
 ag sync -j 8
@@ -57,14 +132,49 @@ ag sync -j 8
 # Prune repos not in config
 ag sync --prune
 
-# Add orphaned repos to config
-ag sync --add
+# Pull updates for all repos
+ag pull
+
+# Edit config
+ag config
+
+# Validate config
+ag config --validate
+
+# Generate config template to stdout
+ag config --generate > config.yaml
+
+# Use a remote config
+ag sync -c https://example.com/config.yaml
+ag sync -c user@host:/path/to/config.yaml
+```
+
+## Providers
+
+| Provider | Host Detection | Token Env Var |
+|----------|---------------|---------------|
+| GitHub | `github.com` | `GITHUB_TOKEN` |
+| Gitea | Custom hosts | `GITEA_TOKEN` |
+| Bitbucket | `bitbucket.org` or custom | `BITBUCKET_TOKEN` |
+
+For self-hosted instances, specify the `type` field explicitly:
+
+```yaml
+- name: "Self-hosted Gitea"
+  source: git.company.com/user
+  type: gitea  # explicit type
+  strategy: all
+  local_path: "~/Git/company"
 ```
 
 ## Documentation
 
-See [full documentation](https://arch-err.github.io/autogitter).
+Full documentation available at **[arch-err.github.io/autogitter](https://arch-err.github.io/autogitter)**
+
+- [Installation](https://arch-err.github.io/autogitter/installation/) - All installation methods
+- [Configuration](https://arch-err.github.io/autogitter/configuration/) - Config file format and options
+- [Usage](https://arch-err.github.io/autogitter/usage/) - Commands and flags reference
 
 ## License
 
-MIT
+MIT License - see [LICENSE](LICENSE) for details.

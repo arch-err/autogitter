@@ -6,24 +6,15 @@ repo_name: arch-err/autogitter
 repo_url: https://github.com/arch-err/autogitter
 
 theme:
-  name: material
-  palette:
-    - scheme: default
-      primary: deep purple
-      accent: purple
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-    - scheme: slate
-      primary: deep purple
-      accent: purple
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
+  name: terminal
+  palette: gruvbox_dark
   features:
-    - navigation.instant
-    - navigation.tracking
-    - content.code.copy
+    - navigation.side.indexes
+    - revision.date
+
+plugins:
+  - search
+  - revision_date
 
 markdown_extensions:
   - pymdownx.highlight:
@@ -31,6 +22,7 @@ markdown_extensions:
   - pymdownx.superfences
   - admonition
   - tables
+  - attr_list
 
 nav:
   - Home: index.md
