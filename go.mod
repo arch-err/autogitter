@@ -1,12 +1,13 @@
 module github.com/arch-err/autogitter
 
-go 1.25.5
+go 1.24.0
 
 require (
 	github.com/charmbracelet/huh v0.8.0
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/log v0.4.2
 	github.com/spf13/cobra v1.10.2
+	golang.design/x/clipboard v0.7.1
 	golang.org/x/term v0.39.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -37,7 +38,6 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	golang.design/x/clipboard v0.7.1 // indirect
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d // indirect
 	golang.org/x/exp/shiny v0.0.0-20250606033433-dcc06ee1d476 // indirect
 	golang.org/x/image v0.28.0 // indirect
