@@ -43,7 +43,7 @@ Invoke-WebRequest -Uri "https://github.com/arch-err/autogitter/releases/latest/d
 
 ## From Source
 
-Requires Go 1.21 or later.
+Requires Go 1.24 or later.
 
 ```bash
 go install github.com/arch-err/autogitter/cmd/ag@latest
