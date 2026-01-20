@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"sync"
@@ -9,6 +10,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
+	"golang.design/x/clipboard"
 	"golang.org/x/term"
 )
 
@@ -74,6 +76,47 @@ func PrintDiff(sourceName string, entries []DiffEntry) {
 		fmt.Println(style.Render(prefix + entry.Name))
 	}
 	fmt.Println()
+}
+
+// SourceDiff represents the diff for a single source
+type SourceDiff struct {
+	Name    string
+	Entries []DiffEntry
+}
+
+// PrintUnifiedDiff prints a unified diff-style output comparing local vs config
+func PrintUnifiedDiff(diffs []SourceDiff) {
+	// Diff header style (cyan like git diff headers)
+	diffHeaderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#00BFFF"))
+	// Hunk header style (purple/magenta like @@ lines)
+	hunkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF79C6"))
+
+	fmt.Println(diffHeaderStyle.Render("--- local"))
+	fmt.Println(diffHeaderStyle.Render("+++ config"))
+
+	for _, diff := range diffs {
+		fmt.Println(hunkStyle.Render(fmt.Sprintf("@@ %s @@", diff.Name)))
+
+		for _, entry := range diff.Entries {
+			var line string
+			var style lipgloss.Style
+
+			switch entry.Status {
+			case StatusAdded:
+				line = "+ " + entry.Name
+				style = AddedStyle
+			case StatusRemoved:
+				line = "- " + entry.Name
+				style = RemovedStyle
+			case StatusUnchanged:
+				line = "  " + entry.Name
+				style = UnchangedStyle
+			}
+
+			fmt.Println(style.Render(line))
+		}
+		fmt.Println()
+	}
 }
 
 func ConfirmPrune(repos []string) (bool, error) {
@@ -246,4 +289,20 @@ func (p *Progress) Finish() {
 // IsTTY returns whether we're running in an interactive terminal
 func IsTTY() bool {
 	return term.IsTerminal(int(os.Stdout.Fd()))
+}
+
+// CopyToClipboard copies text to the system clipboard.
+// It tries the clipboard package first, then falls back to OSC 52 escape sequences.
+func CopyToClipboard(text string) bool {
+	// Try clipboard package first
+	if err := clipboard.Init(); err == nil {
+		clipboard.Write(clipboard.FmtText, []byte(text))
+		return true
+	}
+
+	// Fall back to OSC 52 escape sequence (works in most terminals including tmux)
+	// OSC 52 format: \033]52;c;<base64-encoded-text>\007
+	encoded := base64.StdEncoding.EncodeToString([]byte(text))
+	fmt.Printf("\033]52;c;%s\007", encoded)
+	return true
 }

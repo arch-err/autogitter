@@ -497,6 +497,95 @@ func getOrphanedRepos(statuses []RepoStatus) []RepoStatus {
 	return orphaned
 }
 
+// ComputeSourceStatus computes the status of repos for a single source
+// without performing any actions. Returns the list of repo statuses.
+func ComputeSourceStatus(source *config.Source) ([]RepoStatus, error) {
+	// Load credentials from credentials.env if it exists
+	credPath := connector.DefaultCredentialsPath()
+	if err := connector.LoadCredentialsEnv(credPath); err != nil {
+		ui.Debug("failed to load credentials file", "error", err)
+	}
+
+	// Handle strategy-specific logic
+	switch source.Strategy {
+	case config.StrategyManual:
+		// Manual strategy uses the repos from config
+	case config.StrategyAll:
+		repos, err := fetchReposFromAPI(source)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch repos: %w", err)
+		}
+		source.Repos = repos
+	case config.StrategyRegex:
+		repos, err := fetchReposFromAPI(source)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch repos: %w", err)
+		}
+		filtered, err := filterReposByRegex(repos, source.RegexStrategy.Pattern)
+		if err != nil {
+			return nil, fmt.Errorf("invalid regex pattern: %w", err)
+		}
+		source.Repos = filtered
+	case config.StrategyFile:
+		return nil, fmt.Errorf("file strategy not yet supported")
+	default:
+		return nil, fmt.Errorf("unknown strategy: %s", source.Strategy)
+	}
+
+	// Build configured repos map
+	configuredRepos := make(map[string]bool)
+	for _, repo := range source.Repos {
+		repoName := repoNameFromFullName(repo)
+		configuredRepos[repoName] = true
+	}
+
+	// Scan local directory
+	localRepos, err := scanLocalRepos(source.LocalPath)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("failed to scan local repos: %w", err)
+	}
+
+	// Build status list
+	var statuses []RepoStatus
+
+	// Add configured repos
+	for _, repo := range source.Repos {
+		repoName := repoNameFromFullName(repo)
+		localPath := filepath.Join(source.LocalPath, repoName)
+		exists := localRepos[repoName]
+
+		status := ui.StatusAdded
+		if exists {
+			status = ui.StatusUnchanged
+		}
+
+		statuses = append(statuses, RepoStatus{
+			Name:        repoName,
+			FullName:    repo,
+			LocalPath:   localPath,
+			Status:      status,
+			InConfig:    true,
+			ExistsLocal: exists,
+		})
+	}
+
+	// Add orphaned repos (in local but not in config)
+	for repoName := range localRepos {
+		if !configuredRepos[repoName] {
+			localPath := filepath.Join(source.LocalPath, repoName)
+			statuses = append(statuses, RepoStatus{
+				Name:        repoName,
+				LocalPath:   localPath,
+				Status:      ui.StatusRemoved,
+				InConfig:    false,
+				ExistsLocal: true,
+			})
+		}
+	}
+
+	return statuses, nil
+}
+
 // PullOptions contains options for the pull command
 type PullOptions struct {
 	Force bool

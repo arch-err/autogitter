@@ -2,6 +2,29 @@
 
 ## Commands
 
+### diff
+
+Show a unified diff comparing local repository state against configuration.
+
+```bash
+ag diff [flags]
+```
+
+**Output format:**
+
+```diff
+--- local
++++ config
+@@ Source-Name @@
+  existing-repo
++ repo-to-clone
+- orphaned-repo
+```
+
+- `+` (green) - Repo in config but not local (will be cloned on sync)
+- `-` (red) - Repo local but not in config (orphaned)
+- ` ` (gray) - Repo exists in both (unchanged)
+
 ### sync
 
 Synchronize repositories according to config. Clones new repos and detects orphaned ones.

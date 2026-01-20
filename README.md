@@ -126,6 +126,9 @@ ag pull
 ## Usage
 
 ```bash
+# Show diff between local repos and config
+ag diff
+
 # Sync repositories (clone new, detect orphaned)
 ag sync
 

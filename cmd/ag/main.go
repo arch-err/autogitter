@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	version    = "0.6.0"
+	version    = "0.7.0"
 	configPath string
 	debug      bool
 )
@@ -65,6 +65,13 @@ var pullCmd = &cobra.Command{
 	RunE:  runPull,
 }
 
+var diffCmd = &cobra.Command{
+	Use:   "diff",
+	Short: "Show diff between local repos and config",
+	Long:  `Shows a unified diff-style output comparing local repository state against the configuration.`,
+	RunE:  runDiff,
+}
+
 var (
 	syncPrune      bool
 	syncAdd        bool
@@ -96,6 +103,8 @@ func init() {
 	pullCmd.Flags().BoolVar(&pullForce, "force", false, "skip confirmation prompts")
 	pullCmd.Flags().IntVarP(&pullJobs, "jobs", "j", 4, "number of parallel pull workers")
 	rootCmd.AddCommand(pullCmd)
+
+	rootCmd.AddCommand(diffCmd)
 
 	configCmd.Flags().BoolVarP(&configValidate, "validate", "v", false, "validate config file without editing")
 	configCmd.Flags().BoolVarP(&configGenerate, "generate", "g", false, "generate default config file")
@@ -170,6 +179,48 @@ func runPull(cmd *cobra.Command, args []string) error {
 	}
 
 	ui.Info("pull complete", "updated", result.Updated, "failed", result.Failed)
+
+	return nil
+}
+
+func runDiff(cmd *cobra.Command, args []string) error {
+	cfg, cfgPath, err := loadConfig()
+	if err != nil {
+		ui.Error("failed to load config", "error", err)
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	ui.Debug("loaded config", "path", cfgPath, "sources", len(cfg.Sources))
+
+	var diffs []ui.SourceDiff
+
+	for i := range cfg.Sources {
+		source := &cfg.Sources[i]
+
+		statuses, err := sync.ComputeSourceStatus(source)
+		if err != nil {
+			ui.Warn("skipping source", "source", source.Name, "error", err)
+			continue
+		}
+
+		// Convert RepoStatus to DiffEntry
+		entries := make([]ui.DiffEntry, len(statuses))
+		for j, s := range statuses {
+			entries[j] = ui.DiffEntry{Name: s.Name, Status: s.Status}
+		}
+
+		diffs = append(diffs, ui.SourceDiff{
+			Name:    source.Name,
+			Entries: entries,
+		})
+	}
+
+	if len(diffs) == 0 {
+		ui.Info("no sources to diff")
+		return nil
+	}
+
+	ui.PrintUnifiedDiff(diffs)
 
 	return nil
 }
@@ -446,6 +497,9 @@ func interactiveConnect() (connector.ConnectorType, string, string, error) {
 	if connType == connector.ConnectorBitbucket && host != "bitbucket.org" {
 		fmt.Printf("  (click 'HTTP access tokens' in the menu)\n")
 	}
+	// Copy URL to clipboard
+	ui.CopyToClipboard(tokenURL)
+	fmt.Printf("  \033[90m📋 copied to clipboard\033[0m\n")
 	fmt.Println()
 	fmt.Printf("Required permissions:\n")
 	switch connType {
