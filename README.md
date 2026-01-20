@@ -1,6 +1,5 @@
 <p align="center">
-  <!-- Logo placeholder - replace with your logo -->
-  <img src="docs/assets/logo.png" alt="Autogitter Logo" width="200">
+  <img src="docs/assets/banner.png" alt="Autogitter Banner" width="600">
 </p>
 
 <h1 align="center">Autogitter</h1>

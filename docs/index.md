@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.jpg" alt="Autogitter Logo" width="150">
+</p>
+
 # Autogitter
 
 **Autogitter** (`ag`) is a Git repository synchronization tool that helps you manage multiple repositories across different providers.
