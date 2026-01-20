@@ -10,11 +10,9 @@ theme:
   palette: gruvbox_dark
   features:
     - navigation.side.indexes
-    - revision.date
 
 plugins:
   - search
-  - revision_date
 
 markdown_extensions:
   - pymdownx.highlight:
