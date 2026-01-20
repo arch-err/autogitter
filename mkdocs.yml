@@ -8,7 +8,7 @@ repo_url: https://github.com/arch-err/autogitter
 theme:
   name: terminal
   palette: gruvbox_dark
-  favicon: assets/logo.jpg
+  favicon: assets/logo.png
   features:
     - navigation.side.indexes
 
