@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
 	"strings"
 	"time"
 )
@@ -192,13 +191,3 @@ func (g *GitHubConnector) fetchRepoPage(ctx context.Context, url string) ([]stri
 	return repos, hasMore, nil
 }
 
-// parseNextPageURL extracts the next page URL from the Link header
-func parseNextPageURL(linkHeader string) string {
-	// Link header format: <url>; rel="next", <url>; rel="last"
-	re := regexp.MustCompile(`<([^>]+)>;\s*rel="next"`)
-	matches := re.FindStringSubmatch(linkHeader)
-	if len(matches) > 1 {
-		return matches[1]
-	}
-	return ""
-}

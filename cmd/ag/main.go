@@ -283,12 +283,14 @@ func runConfig(cmd *cobra.Command, args []string) error {
 			ui.Error("config validation failed", "error", err)
 
 			var retry bool
-			huh.NewConfirm().
+			if err := huh.NewConfirm().
 				Title("Config validation failed. Edit again?").
 				Affirmative("Yes, edit again").
 				Negative("No, discard changes").
 				Value(&retry).
-				Run()
+				Run(); err != nil {
+				return fmt.Errorf("prompt failed: %w", err)
+			}
 
 			if retry {
 				continue
@@ -320,9 +322,9 @@ func getEditor() string {
 }
 
 func runConnect(cmd *cobra.Command, args []string) error {
-	// Load existing credentials
+	// Load existing credentials (ignore error - credentials may not exist yet)
 	credPath := connector.DefaultCredentialsPath()
-	connector.LoadCredentialsEnv(credPath)
+	_ = connector.LoadCredentialsEnv(credPath)
 
 	// List mode
 	if connectList {

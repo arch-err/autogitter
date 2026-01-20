@@ -264,8 +264,6 @@ func syncSource(source *config.Source, cfg *config.Config, opts SyncOptions) (*S
 
 	// Handle orphaned repos
 	if hasOrphaned {
-		action := "skip"
-
 		if opts.DryRun {
 			// In dry-run mode, just report what would happen based on flags
 			orphaned := getOrphanedRepos(statuses)
@@ -280,6 +278,7 @@ func syncSource(source *config.Source, cfg *config.Config, opts SyncOptions) (*S
 				}
 			}
 		} else {
+			var action string
 			if opts.Prune {
 				action = "prune"
 			} else if opts.Add {
