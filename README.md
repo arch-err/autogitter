@@ -17,6 +17,13 @@
 </p>
 
 <p align="center">
+  <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go"></a>
+  <a href="https://cobra.dev/"><img src="https://img.shields.io/badge/Cobra-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Cobra"></a>
+  <a href="https://charm.sh/"><img src="https://img.shields.io/badge/Charm-FF69B4?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0wIDE4Yy00LjQyIDAtOC0zLjU4LTgtOHMzLjU4LTggOC04IDggMy41OCA4IDgtMy41OCA4LTggOHoiLz48L3N2Zz4=" alt="Charm"></a>
+  <a href="https://claude.ai/"><img src="https://img.shields.io/badge/Built%20with-Claude%20Code-blueviolet?style=flat-square" alt="Built with Claude Code"></a>
+</p>
+
+<p align="center">
   <a href="https://arch-err.github.io/autogitter">Documentation</a> •
   <a href="#installation">Installation</a> •
   <a href="#quick-start">Quick Start</a> •
@@ -169,11 +176,14 @@ For self-hosted instances, specify the `type` field explicitly:
 
 ## Documentation
 
-Full documentation available at **[arch-err.github.io/autogitter](https://arch-err.github.io/autogitter)**
+Full documentation available [here](https://arch-err.github.io/autogitter).
 
-- [Installation](https://arch-err.github.io/autogitter/installation/) - All installation methods
-- [Configuration](https://arch-err.github.io/autogitter/configuration/) - Config file format and options
-- [Usage](https://arch-err.github.io/autogitter/usage/) - Commands and flags reference
+## Built With
+
+- [Go](https://go.dev/) - Programming language
+- [Cobra](https://cobra.dev/) - CLI framework
+- [Charm](https://charm.sh/) - Terminal UI libraries (Huh, Lip Gloss, Log)
+- [Claude Code](https://claude.ai/code) - AI pair programming
 
 ## License
 
