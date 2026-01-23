@@ -56,6 +56,15 @@ type Config struct {
 }
 
 func DefaultConfigPath() string {
+	return filepath.Join(configDir(), "config.yaml")
+}
+
+// SourcesDirPath returns the path to the sources.d directory
+func SourcesDirPath() string {
+	return filepath.Join(configDir(), "sources.d")
+}
+
+func configDir() string {
 	configHome := os.Getenv("XDG_CONFIG_HOME")
 	if configHome == "" {
 		home, err := os.UserHomeDir()
@@ -65,7 +74,7 @@ func DefaultConfigPath() string {
 			configHome = filepath.Join(home, ".config")
 		}
 	}
-	return filepath.Join(configHome, "autogitter", "config.yaml")
+	return filepath.Join(configHome, "autogitter")
 }
 
 func Load(path string) (*Config, error) {
@@ -79,6 +88,14 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
+	// Load additional sources from sources.d directory (only for local configs)
+	if !IsRemote(path) {
+		sourcesDir := filepath.Join(filepath.Dir(path), "sources.d")
+		if err := cfg.loadSourcesDir(sourcesDir); err != nil {
+			return nil, fmt.Errorf("failed to load sources.d: %w", err)
+		}
+	}
+
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
@@ -86,6 +103,56 @@ func Load(path string) (*Config, error) {
 	cfg.ExpandPaths()
 
 	return &cfg, nil
+}
+
+// loadSourcesDir loads all yaml files from the sources.d directory and merges them
+func (c *Config) loadSourcesDir(dir string) error {
+	// Check if directory exists
+	info, err := os.Stat(dir)
+	if os.IsNotExist(err) {
+		return nil // sources.d is optional
+	}
+	if err != nil {
+		return fmt.Errorf("failed to stat sources.d: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("sources.d is not a directory")
+	}
+
+	// Read directory entries
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("failed to read sources.d: %w", err)
+	}
+
+	// Process files in alphabetical order (ReadDir already sorts)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		// Only process .yaml and .yml files
+		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+			continue
+		}
+
+		filePath := filepath.Join(dir, name)
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return fmt.Errorf("failed to read %s: %w", name, err)
+		}
+
+		var fileCfg Config
+		if err := yaml.Unmarshal(data, &fileCfg); err != nil {
+			return fmt.Errorf("failed to parse %s: %w", name, err)
+		}
+
+		// Append sources from this file
+		c.Sources = append(c.Sources, fileCfg.Sources...)
+	}
+
+	return nil
 }
 
 // readConfig reads config data from a local file, HTTP URL, or SSH path

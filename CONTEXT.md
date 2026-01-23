@@ -63,6 +63,7 @@ autogitter/
 ## Config Location
 
 - Config: `$XDG_CONFIG_HOME/autogitter/config.yaml` (~/.config/autogitter/config.yaml)
+- Sources.d: `$XDG_CONFIG_HOME/autogitter/sources.d/` (modular config files)
 - Credentials: `$XDG_DATA_HOME/autogitter/credentials.env` (~/.local/share/autogitter/credentials.env)
 
 ## Sync Strategies

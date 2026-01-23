@@ -2,6 +2,38 @@
 
 The configuration file is stored at `$XDG_CONFIG_HOME/autogitter/config.yaml` (typically `~/.config/autogitter/config.yaml`).
 
+## Modular Configuration with sources.d
+
+For better organization, you can split your sources across multiple files in the `sources.d` directory:
+
+```
+~/.config/autogitter/
+├── config.yaml          # Main config (required)
+└── sources.d/           # Additional source files (optional)
+    ├── github.yaml
+    ├── work.yaml
+    └── personal.yaml
+```
+
+Each file in `sources.d/` uses the same format as the main config:
+
+```yaml
+# ~/.config/autogitter/sources.d/work.yaml
+sources:
+  - name: "Work Bitbucket"
+    source: bitbucket.company.com/~username
+    strategy: all
+    type: bitbucket
+    local_path: "~/Git/work"
+```
+
+**Rules:**
+- Main `config.yaml` must exist
+- Files are loaded in alphabetical order
+- Only `.yaml` and `.yml` files are processed
+- Sources from all files are merged together
+- Not supported for remote configs (HTTP/SSH)
+
 ## Config Format
 
 ```yaml
