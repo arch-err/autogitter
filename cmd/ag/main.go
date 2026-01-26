@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	version    = "0.7.0"
+	version    = "0.7.1"
 	configPath string
 	debug      bool
 )
@@ -239,9 +239,6 @@ func runConfig(cmd *cobra.Command, args []string) error {
 
 	// Validate only mode
 	if configValidate {
-		if !config.Exists(path) {
-			return fmt.Errorf("config file not found: %s", path)
-		}
 		if err := config.ValidateFile(path); err != nil {
 			ui.Error("config validation failed", "error", err)
 			return err

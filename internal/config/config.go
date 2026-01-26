@@ -78,14 +78,20 @@ func configDir() string {
 }
 
 func Load(path string) (*Config, error) {
+	var cfg Config
+
 	data, err := readConfig(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
-	}
-
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %w", err)
+		// For local configs, allow missing config file if sources.d provides sources
+		if !IsRemote(path) && os.IsNotExist(err) {
+			// Continue with empty config, sources.d may provide sources
+		} else {
+			return nil, fmt.Errorf("failed to read config file: %w", err)
+		}
+	} else {
+		if err := yaml.Unmarshal(data, &cfg); err != nil {
+			return nil, fmt.Errorf("failed to parse config file: %w", err)
+		}
 	}
 
 	// Load additional sources from sources.d directory (only for local configs)
