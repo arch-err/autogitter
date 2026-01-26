@@ -32,6 +32,84 @@ type RegexStrategy struct {
 	Pattern string `yaml:"pattern"`
 }
 
+// RepoEntry represents a repository in the config.
+// It supports both plain string format ("user/repo") and object format
+// with an optional local_path override.
+type RepoEntry struct {
+	Name      string `yaml:"name"`
+	LocalPath string `yaml:"local_path,omitempty"`
+}
+
+// UnmarshalYAML allows RepoEntry to be unmarshaled from either a plain string
+// or a mapping with name and local_path fields.
+func (r *RepoEntry) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		r.Name = value.Value
+		return nil
+	}
+	if value.Kind == yaml.MappingNode {
+		// Use an alias type to avoid infinite recursion
+		type repoEntryRaw struct {
+			Name      string `yaml:"name"`
+			LocalPath string `yaml:"local_path,omitempty"`
+		}
+		var raw repoEntryRaw
+		if err := value.Decode(&raw); err != nil {
+			return err
+		}
+		r.Name = raw.Name
+		r.LocalPath = raw.LocalPath
+		return nil
+	}
+	return fmt.Errorf("expected string or mapping for repo entry, got %v", value.Kind)
+}
+
+// MarshalYAML emits a plain string when no LocalPath is set, or an object otherwise.
+func (r RepoEntry) MarshalYAML() (interface{}, error) {
+	if r.LocalPath == "" {
+		return r.Name, nil
+	}
+	return struct {
+		Name      string `yaml:"name"`
+		LocalPath string `yaml:"local_path"`
+	}{
+		Name:      r.Name,
+		LocalPath: r.LocalPath,
+	}, nil
+}
+
+// ResolvedLocalPath returns the effective local path for this repo.
+// If LocalPath is set, it returns that; otherwise filepath.Join(sourceLocalPath, baseName).
+func (r RepoEntry) ResolvedLocalPath(sourceLocalPath string) string {
+	if r.LocalPath != "" {
+		return r.LocalPath
+	}
+	return filepath.Join(sourceLocalPath, repoBaseName(r.Name))
+}
+
+// HasCustomLocalPath returns true if this repo has a custom local_path override.
+func (r RepoEntry) HasCustomLocalPath() bool {
+	return r.LocalPath != ""
+}
+
+// RepoEntriesFromNames converts a slice of repo name strings to a RepoEntry slice.
+func RepoEntriesFromNames(names []string) []RepoEntry {
+	entries := make([]RepoEntry, len(names))
+	for i, name := range names {
+		entries[i] = RepoEntry{Name: name}
+	}
+	return entries
+}
+
+// repoBaseName extracts the repo name from a full "user/repo" string.
+func repoBaseName(fullName string) string {
+	parts := strings.Split(fullName, "/")
+	if len(parts) > 0 {
+		return parts[len(parts)-1]
+	}
+	return fullName
+}
+
 type SSHOptions struct {
 	Port       int    `yaml:"port,omitempty"`
 	PrivateKey string `yaml:"private_key,omitempty"`
@@ -48,7 +126,7 @@ type Source struct {
 	SSHOptions    SSHOptions    `yaml:"ssh_options,omitempty"`
 	PrivateKey    string        `yaml:"private_key,omitempty"` // deprecated: use ssh_options.private_key
 	Branch        string        `yaml:"branch,omitempty"`
-	Repos         []string      `yaml:"repos,omitempty"`
+	Repos         []RepoEntry   `yaml:"repos,omitempty"`
 }
 
 type Config struct {
@@ -259,6 +337,11 @@ func (c *Config) Validate() error {
 			if len(src.Repos) == 0 {
 				return fmt.Errorf("source %q: repos list is required for manual strategy", src.Name)
 			}
+			for _, repo := range src.Repos {
+				if repo.Name == "" {
+					return fmt.Errorf("source %q: repo name is required", src.Name)
+				}
+			}
 		case StrategyAll, StrategyFile, StrategyRegex:
 			// Valid strategies that fetch from API
 		case "":
@@ -292,6 +375,11 @@ func (c *Config) ExpandPaths() {
 		}
 		if c.Sources[i].SSHOptions.PrivateKey != "" {
 			c.Sources[i].SSHOptions.PrivateKey = expandPath(c.Sources[i].SSHOptions.PrivateKey)
+		}
+		for j := range c.Sources[i].Repos {
+			if c.Sources[i].Repos[j].LocalPath != "" {
+				c.Sources[i].Repos[j].LocalPath = expandPath(c.Sources[i].Repos[j].LocalPath)
+			}
 		}
 	}
 }

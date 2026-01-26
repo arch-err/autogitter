@@ -74,7 +74,7 @@ func Run(cfg *config.Config, opts SyncOptions) (*SyncResult, error) {
 				ui.Warn("skipping source - failed to fetch repos", "source", source.Name, "error", err)
 				continue
 			}
-			source.Repos = repos
+			source.Repos = config.RepoEntriesFromNames(repos)
 			ui.Debug("fetched repos from API", "source", source.Name, "count", len(repos))
 		case config.StrategyRegex:
 			// Fetch repos from API, then filter by regex pattern
@@ -88,7 +88,7 @@ func Run(cfg *config.Config, opts SyncOptions) (*SyncResult, error) {
 				ui.Warn("skipping source - invalid regex pattern", "source", source.Name, "error", err)
 				continue
 			}
-			source.Repos = filtered
+			source.Repos = config.RepoEntriesFromNames(filtered)
 			ui.Debug("fetched and filtered repos from API", "source", source.Name, "total", len(repos), "matched", len(filtered))
 		case config.StrategyFile:
 			ui.Warn("skipping source with unsupported strategy", "source", source.Name, "strategy", source.Strategy)
@@ -187,11 +187,13 @@ func syncSource(source *config.Source, cfg *config.Config, opts SyncOptions) (*S
 		}
 	}
 
-	// Get configured repos
+	// Get configured repos — only repos without custom LocalPath participate in orphan detection
 	configuredRepos := make(map[string]bool)
 	for _, repo := range source.Repos {
-		repoName := repoNameFromFullName(repo)
-		configuredRepos[repoName] = true
+		if !repo.HasCustomLocalPath() {
+			repoName := repoNameFromFullName(repo.Name)
+			configuredRepos[repoName] = true
+		}
 	}
 
 	// Scan local directory
@@ -205,9 +207,15 @@ func syncSource(source *config.Source, cfg *config.Config, opts SyncOptions) (*S
 
 	// Add configured repos
 	for _, repo := range source.Repos {
-		repoName := repoNameFromFullName(repo)
-		localPath := filepath.Join(source.LocalPath, repoName)
-		exists := localRepos[repoName]
+		repoName := repoNameFromFullName(repo.Name)
+		resolvedPath := repo.ResolvedLocalPath(source.LocalPath)
+
+		var exists bool
+		if repo.HasCustomLocalPath() {
+			exists = git.IsGitRepo(resolvedPath)
+		} else {
+			exists = localRepos[repoName]
+		}
 
 		status := ui.StatusAdded
 		if exists {
@@ -216,8 +224,8 @@ func syncSource(source *config.Source, cfg *config.Config, opts SyncOptions) (*S
 
 		statuses = append(statuses, RepoStatus{
 			Name:        repoName,
-			FullName:    repo,
-			LocalPath:   localPath,
+			FullName:    repo.Name,
+			LocalPath:   resolvedPath,
 			Status:      status,
 			InConfig:    true,
 			ExistsLocal: exists,
@@ -323,7 +331,7 @@ func syncSource(source *config.Source, cfg *config.Config, opts SyncOptions) (*S
 				orphaned := getOrphanedRepos(statuses)
 				for _, repo := range orphaned {
 					fullName := guessFullName(source.Source, repo.Name)
-					source.Repos = append(source.Repos, fullName)
+					source.Repos = append(source.Repos, config.RepoEntry{Name: fullName})
 					result.Added++
 					ui.Info("added to config", "repo", fullName)
 				}
@@ -514,7 +522,7 @@ func ComputeSourceStatus(source *config.Source) ([]RepoStatus, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch repos: %w", err)
 		}
-		source.Repos = repos
+		source.Repos = config.RepoEntriesFromNames(repos)
 	case config.StrategyRegex:
 		repos, err := fetchReposFromAPI(source)
 		if err != nil {
@@ -524,18 +532,20 @@ func ComputeSourceStatus(source *config.Source) ([]RepoStatus, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid regex pattern: %w", err)
 		}
-		source.Repos = filtered
+		source.Repos = config.RepoEntriesFromNames(filtered)
 	case config.StrategyFile:
 		return nil, fmt.Errorf("file strategy not yet supported")
 	default:
 		return nil, fmt.Errorf("unknown strategy: %s", source.Strategy)
 	}
 
-	// Build configured repos map
+	// Build configured repos map — only repos without custom LocalPath participate in orphan detection
 	configuredRepos := make(map[string]bool)
 	for _, repo := range source.Repos {
-		repoName := repoNameFromFullName(repo)
-		configuredRepos[repoName] = true
+		if !repo.HasCustomLocalPath() {
+			repoName := repoNameFromFullName(repo.Name)
+			configuredRepos[repoName] = true
+		}
 	}
 
 	// Scan local directory
@@ -549,9 +559,15 @@ func ComputeSourceStatus(source *config.Source) ([]RepoStatus, error) {
 
 	// Add configured repos
 	for _, repo := range source.Repos {
-		repoName := repoNameFromFullName(repo)
-		localPath := filepath.Join(source.LocalPath, repoName)
-		exists := localRepos[repoName]
+		repoName := repoNameFromFullName(repo.Name)
+		resolvedPath := repo.ResolvedLocalPath(source.LocalPath)
+
+		var exists bool
+		if repo.HasCustomLocalPath() {
+			exists = git.IsGitRepo(resolvedPath)
+		} else {
+			exists = localRepos[repoName]
+		}
 
 		status := ui.StatusAdded
 		if exists {
@@ -560,8 +576,8 @@ func ComputeSourceStatus(source *config.Source) ([]RepoStatus, error) {
 
 		statuses = append(statuses, RepoStatus{
 			Name:        repoName,
-			FullName:    repo,
-			LocalPath:   localPath,
+			FullName:    repo.Name,
+			LocalPath:   resolvedPath,
 			Status:      status,
 			InConfig:    true,
 			ExistsLocal: exists,
@@ -625,29 +641,38 @@ func RunPull(cfg *config.Config, opts PullOptions) (*PullResult, error) {
 	for i := range cfg.Sources {
 		source := &cfg.Sources[i]
 
-		// Check if local_path exists
-		if _, err := os.Stat(source.LocalPath); os.IsNotExist(err) {
-			ui.Warn("skipping source - directory does not exist", "source", source.Name, "path", source.LocalPath)
-			continue
+		// Scan local directory for repos in source.LocalPath
+		if _, err := os.Stat(source.LocalPath); !os.IsNotExist(err) {
+			localRepos, err := scanLocalRepos(source.LocalPath)
+			if err != nil {
+				ui.Warn("failed to scan local repos", "source", source.Name, "error", err)
+			} else {
+				for repoName := range localRepos {
+					repoPath := filepath.Join(source.LocalPath, repoName)
+					allJobs = append(allJobs, pullJob{
+						path:       repoPath,
+						name:       repoName,
+						privateKey: source.GetPrivateKey(),
+					})
+				}
+				ui.Info("found repos to pull", "source", source.Name, "count", len(localRepos))
+			}
+		} else {
+			ui.Warn("source directory does not exist", "source", source.Name, "path", source.LocalPath)
 		}
 
-		// Scan local directory for repos
-		localRepos, err := scanLocalRepos(source.LocalPath)
-		if err != nil {
-			ui.Warn("skipping source - failed to scan local repos", "source", source.Name, "error", err)
-			continue
-		}
-
-		ui.Info("found repos to pull", "source", source.Name, "count", len(localRepos))
-
-		// Add jobs for each repo
-		for repoName := range localRepos {
-			repoPath := filepath.Join(source.LocalPath, repoName)
-			allJobs = append(allJobs, pullJob{
-				path:       repoPath,
-				name:       repoName,
-				privateKey: source.GetPrivateKey(),
-			})
+		// Add pull jobs for repos with custom local_path that exist locally
+		for _, repo := range source.Repos {
+			if repo.HasCustomLocalPath() {
+				resolvedPath := repo.ResolvedLocalPath(source.LocalPath)
+				if git.IsGitRepo(resolvedPath) {
+					allJobs = append(allJobs, pullJob{
+						path:       resolvedPath,
+						name:       repoNameFromFullName(repo.Name),
+						privateKey: source.GetPrivateKey(),
+					})
+				}
+			}
 		}
 	}
 
