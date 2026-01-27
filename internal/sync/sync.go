@@ -217,11 +217,17 @@ func syncSource(source *config.Source, cfg *config.Config, opts SyncOptions) (*S
 			exists = localRepos[repoName]
 		}
 
-		// If path exists but isn't a git repo, warn and skip
+		// If path exists as a non-empty non-git directory (or as a file), warn and skip.
+		// Empty directories are fine — git clone handles them.
 		if !exists {
-			if _, statErr := os.Stat(resolvedPath); statErr == nil {
-				ui.Warn("path already exists but is not a git repo, skipping", "repo", repo.Name, "path", resolvedPath)
-				exists = true
+			if info, statErr := os.Stat(resolvedPath); statErr == nil {
+				if !info.IsDir() {
+					ui.Warn("path already exists as a file, skipping", "repo", repo.Name, "path", resolvedPath)
+					exists = true
+				} else if entries, readErr := os.ReadDir(resolvedPath); readErr == nil && len(entries) > 0 {
+					ui.Warn("path already exists but is not a git repo, skipping", "repo", repo.Name, "path", resolvedPath)
+					exists = true
+				}
 			}
 		}
 
@@ -577,11 +583,17 @@ func ComputeSourceStatus(source *config.Source) ([]RepoStatus, error) {
 			exists = localRepos[repoName]
 		}
 
-		// If path exists but isn't a git repo, warn and skip
+		// If path exists as a non-empty non-git directory (or as a file), warn and skip.
+		// Empty directories are fine — git clone handles them.
 		if !exists {
-			if _, statErr := os.Stat(resolvedPath); statErr == nil {
-				ui.Warn("path already exists but is not a git repo, skipping", "repo", repo.Name, "path", resolvedPath)
-				exists = true
+			if info, statErr := os.Stat(resolvedPath); statErr == nil {
+				if !info.IsDir() {
+					ui.Warn("path already exists as a file, skipping", "repo", repo.Name, "path", resolvedPath)
+					exists = true
+				} else if entries, readErr := os.ReadDir(resolvedPath); readErr == nil && len(entries) > 0 {
+					ui.Warn("path already exists but is not a git repo, skipping", "repo", repo.Name, "path", resolvedPath)
+					exists = true
+				}
 			}
 		}
 
