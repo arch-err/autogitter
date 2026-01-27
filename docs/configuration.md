@@ -88,7 +88,7 @@ sources:
 | `strategy` | Yes | Sync strategy: `manual`, `all`, `regex`, or `file` |
 | `type` | No | Provider type: `github`, `gitea`, `bitbucket` (auto-detected from host if omitted) |
 | `local_path` | Yes | Where to clone repos (supports `$HOME`, `~`) |
-| `repos` | For manual | List of repos to sync |
+| `repos` | For manual | List of repos to sync (strings or objects with `name` and optional `local_path`) |
 | `regex_strategy` | For regex | Regex pattern configuration |
 | `branch` | No | Branch to clone (uses remote default if not set) |
 | `private_key` | No | Path to SSH key for this source (legacy, prefer `ssh_options`) |
@@ -122,6 +122,23 @@ repos:
   - user/repo2
   - org/project
 ```
+
+#### Per-Repo Local Path
+
+Individual repos can override the source's `local_path` to clone to a custom location. This is useful for dotfiles or config repos that belong in a specific directory:
+
+```yaml
+strategy: manual
+local_path: "~/Git/github"
+repos:
+  - user/repo1                        # cloned to ~/Git/github/repo1
+  - name: user/tmux-conf              # cloned to ~/.config/tmux
+    local_path: "~/.config/tmux"
+  - name: user/nvim-config            # cloned to ~/.config/nvim
+    local_path: "~/.config/nvim"
+```
+
+Both plain strings and objects are supported in the repos list. Repos with a custom `local_path` are excluded from orphan detection in the source directory. If the target path already exists but is not a git repo, autogitter will warn and skip it.
 
 Best for: Curated lists of specific repos you want to track.
 

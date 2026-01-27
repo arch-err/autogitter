@@ -41,6 +41,7 @@
 | **Remote Configs** | Load config from HTTP/HTTPS URLs or SSH paths |
 | **Dry Run** | Preview changes before applying them |
 | **Interactive CLI** | Beautiful diffs, prompts, and progress indicators |
+| **Per-Repo Paths** | Override clone destination for individual repos |
 | **SSH Options** | Custom ports and private keys per source |
 
 ## Installation
@@ -101,6 +102,8 @@ sources:
     repos:
       - myteam/project-alpha
       - myteam/project-beta
+      - name: myteam/tmux-conf        # override clone destination
+        local_path: "~/.config/tmux"
 
   # Sync repos matching a pattern
   - name: "APIs"

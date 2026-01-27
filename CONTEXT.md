@@ -6,7 +6,7 @@
 
 - **Repo**: https://github.com/arch-err/autogitter
 - **Docs**: https://arch-err.github.io/autogitter
-- **Current Version**: v0.7.0
+- **Current Version**: v0.8.0
 
 ## Tech Stack
 
@@ -73,7 +73,14 @@ autogitter/
 3. **regex** - Filter repos by pattern
 4. **file** - (Coming soon) Repos containing specific file
 
-## Recent Changes (v0.7.0)
+## Recent Changes (v0.8.0)
+
+- Added per-repo `local_path` override for manual strategy repos
+- Repos list supports both plain strings and objects with `name`/`local_path`
+- Warns and skips when clone target exists but is not a git repo
+- Added `sources.d` directory for modular configuration
+
+## Previous Changes (v0.7.0)
 
 - Added `ag diff` command with unified diff output
 - Added `ag pull` command for batch updates
