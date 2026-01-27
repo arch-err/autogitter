@@ -217,6 +217,14 @@ func syncSource(source *config.Source, cfg *config.Config, opts SyncOptions) (*S
 			exists = localRepos[repoName]
 		}
 
+		// If path exists but isn't a git repo, warn and skip
+		if !exists {
+			if _, statErr := os.Stat(resolvedPath); statErr == nil {
+				ui.Warn("path already exists but is not a git repo, skipping", "repo", repo.Name, "path", resolvedPath)
+				exists = true
+			}
+		}
+
 		status := ui.StatusAdded
 		if exists {
 			status = ui.StatusUnchanged
@@ -567,6 +575,14 @@ func ComputeSourceStatus(source *config.Source) ([]RepoStatus, error) {
 			exists = git.IsGitRepo(resolvedPath)
 		} else {
 			exists = localRepos[repoName]
+		}
+
+		// If path exists but isn't a git repo, warn and skip
+		if !exists {
+			if _, statErr := os.Stat(resolvedPath); statErr == nil {
+				ui.Warn("path already exists but is not a git repo, skipping", "repo", repo.Name, "path", resolvedPath)
+				exists = true
+			}
 		}
 
 		status := ui.StatusAdded
