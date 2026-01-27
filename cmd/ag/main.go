@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime/debug"
 	"strings"
 
 	"github.com/arch-err/autogitter/internal/config"
@@ -18,8 +19,24 @@ import (
 var (
 	version    = "dev"
 	configPath string
-	debug      bool
+	debugFlag  bool
 )
+
+func getVersion() string {
+	// Prefer ldflags-injected version (release builds)
+	if version != "dev" {
+		return version
+	}
+	// Fall back to Go module version (go install @version)
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return version
+}
+
+func init() {
+	rootCmd.Version = getVersion()
+}
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
@@ -31,9 +48,8 @@ var rootCmd = &cobra.Command{
 	Use:     "ag",
 	Short:   "Autogitter - Git repository synchronization tool",
 	Long:    `Autogitter (ag) is a tool to synchronize git repositories based on a configuration file.`,
-	Version: version,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		ui.SetDebug(debug)
+		ui.SetDebug(debugFlag)
 	},
 }
 
@@ -90,7 +106,7 @@ var (
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "path to config file (default: $XDG_CONFIG_HOME/autogitter/config.yaml)")
-	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "enable debug logging")
+	rootCmd.PersistentFlags().BoolVar(&debugFlag, "debug", false, "enable debug logging")
 
 	syncCmd.Flags().BoolVarP(&syncPrune, "prune", "p", false, "prune repos not in config")
 	syncCmd.Flags().BoolVarP(&syncAdd, "add", "a", false, "add orphaned repos to config")
