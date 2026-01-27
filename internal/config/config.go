@@ -113,6 +113,7 @@ func repoBaseName(fullName string) string {
 type SSHOptions struct {
 	Port       int    `yaml:"port,omitempty"`
 	PrivateKey string `yaml:"private_key,omitempty"`
+	Submodules bool   `yaml:"submodules,omitempty"`
 }
 
 type Source struct {

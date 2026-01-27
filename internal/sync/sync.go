@@ -453,6 +453,7 @@ func cloneWorker(jobs <-chan cloneJob, results chan<- cloneResult, wg *gosync.Wa
 			Path:       job.status.LocalPath,
 			Branch:     job.source.GetBranch(),
 			PrivateKey: job.source.GetPrivateKey(),
+			Submodules: job.source.SSHOptions.Submodules,
 		})
 		results <- cloneResult{
 			name:    job.status.FullName,
@@ -646,6 +647,7 @@ type pullJob struct {
 	path       string
 	name       string
 	privateKey string
+	submodules bool
 }
 
 type pullResult struct {
@@ -681,6 +683,7 @@ func RunPull(cfg *config.Config, opts PullOptions) (*PullResult, error) {
 						path:       repoPath,
 						name:       repoName,
 						privateKey: source.GetPrivateKey(),
+						submodules: source.SSHOptions.Submodules,
 					})
 				}
 				ui.Info("found repos to pull", "source", source.Name, "count", len(localRepos))
@@ -698,6 +701,7 @@ func RunPull(cfg *config.Config, opts PullOptions) (*PullResult, error) {
 						path:       resolvedPath,
 						name:       repoNameFromFullName(repo.Name),
 						privateKey: source.GetPrivateKey(),
+						submodules: source.SSHOptions.Submodules,
 					})
 				}
 			}
@@ -786,6 +790,7 @@ func pullWorker(jobs <-chan pullJob, results chan<- pullResult, wg *gosync.WaitG
 		err := git.Pull(git.PullOptions{
 			Path:       job.path,
 			PrivateKey: job.privateKey,
+			Submodules: job.submodules,
 		})
 		results <- pullResult{
 			name:    job.name,

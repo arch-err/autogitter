@@ -15,11 +15,13 @@ type CloneOptions struct {
 	Path       string
 	Branch     string
 	PrivateKey string
+	Submodules bool
 }
 
 type PullOptions struct {
 	Path       string
 	PrivateKey string
+	Submodules bool
 }
 
 func Clone(opts CloneOptions) error {
@@ -37,6 +39,10 @@ func Clone(opts CloneOptions) error {
 	}
 
 	args := []string{"clone"}
+
+	if opts.Submodules {
+		args = append(args, "--recurse-submodules")
+	}
 
 	if opts.Branch != "" {
 		args = append(args, "--branch", opts.Branch)
@@ -80,6 +86,20 @@ func Pull(opts PullOptions) error {
 	}
 
 	log.Debug("pulled repository", "path", opts.Path)
+
+	if opts.Submodules {
+		subCmd := exec.Command("git", "-C", opts.Path, "submodule", "update", "--init", "--recursive")
+		if opts.PrivateKey != "" {
+			sshCmd := fmt.Sprintf("ssh -i %s -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new", opts.PrivateKey)
+			subCmd.Env = append(os.Environ(), "GIT_SSH_COMMAND="+sshCmd)
+		}
+		subOutput, subErr := subCmd.CombinedOutput()
+		if subErr != nil {
+			return fmt.Errorf("git submodule update failed: %w\n%s", subErr, string(subOutput))
+		}
+		log.Debug("updated submodules", "path", opts.Path)
+	}
+
 	return nil
 }
 
