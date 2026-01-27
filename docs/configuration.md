@@ -96,18 +96,74 @@ sources:
 
 ## SSH Options
 
-For sources that require custom SSH settings (like Bitbucket Server with non-standard ports):
+Configure SSH behavior per source using the `ssh_options` block:
 
 ```yaml
 ssh_options:
   port: 7999                          # Custom SSH port
   private_key: "~/.ssh/work_ed25519"  # Path to SSH private key
+  submodules: true                    # Recurse submodules on clone & pull
 ```
 
-When `ssh_options.port` is specified, autogitter uses the `ssh://` URL format:
+### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `port` | int | Custom SSH port. When set, autogitter uses `ssh://git@host:port/repo.git` URL format instead of `git@host:repo.git` |
+| `private_key` | string | Path to SSH private key for this source. Supports `~` and environment variables. Used for clone, pull, and submodule operations |
+| `submodules` | bool | When `true`, clones with `--recurse-submodules` and runs `git submodule update --init --recursive` after each pull |
+
+### Custom Port
+
+For self-hosted instances with non-standard SSH ports (common with Bitbucket Server):
+
+```yaml
+- name: "Bitbucket Server"
+  source: bitbucket.company.com/~username
+  type: bitbucket
+  strategy: all
+  local_path: "~/Git/work"
+  ssh_options:
+    port: 7999
 ```
-ssh://git@host:port/repo.git
+
+### Private Key
+
+Specify a per-source SSH key for private repositories:
+
+```yaml
+- name: "Work"
+  source: github.com/myorg
+  strategy: all
+  local_path: "~/Git/work"
+  ssh_options:
+    private_key: "~/.ssh/work_ed25519"
 ```
+
+The key is passed via `GIT_SSH_COMMAND` with `-o IdentitiesOnly=yes` so only the specified key is used.
+
+### Submodules
+
+Enable recursive submodule support for sources with repos that use git submodules:
+
+```yaml
+- name: "Projects"
+  source: github.com/myorg
+  strategy: manual
+  local_path: "~/Git/projects"
+  ssh_options:
+    private_key: "~/.ssh/id_ed25519"  # also used for submodule fetches
+    submodules: true
+  repos:
+    - myorg/project-with-submodules
+```
+
+When `submodules: true`:
+
+- **Clone**: runs `git clone --recurse-submodules`, initializing all submodules during clone
+- **Pull**: after `git pull`, runs `git submodule update --init --recursive` to sync submodule state
+
+The same SSH key (if configured) is used for submodule operations, so private submodule URLs work correctly.
 
 ## Strategies
 

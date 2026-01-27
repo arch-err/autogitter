@@ -6,7 +6,7 @@
 
 - **Repo**: https://github.com/arch-err/autogitter
 - **Docs**: https://arch-err.github.io/autogitter
-- **Current Version**: v0.8.0
+- **Current Version**: v0.9.0
 
 ## Tech Stack
 
@@ -73,7 +73,12 @@ autogitter/
 3. **regex** - Filter repos by pattern
 4. **file** - (Coming soon) Repos containing specific file
 
-## Recent Changes (v0.8.0)
+## Recent Changes (v0.9.0)
+
+- Added `submodules: true` option in `ssh_options` for recursive submodule clone/pull
+- Version resolved from Go build info for `go install` users
+
+## Previous Changes (v0.8.0)
 
 - Added per-repo `local_path` override for manual strategy repos
 - Repos list supports both plain strings and objects with `name`/`local_path`

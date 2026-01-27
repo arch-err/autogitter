@@ -42,7 +42,7 @@
 | **Dry Run** | Preview changes before applying them |
 | **Interactive CLI** | Beautiful diffs, prompts, and progress indicators |
 | **Per-Repo Paths** | Override clone destination for individual repos |
-| **SSH Options** | Custom ports and private keys per source |
+| **SSH Options** | Custom ports, private keys, and submodule support per source |
 
 ## Installation
 
